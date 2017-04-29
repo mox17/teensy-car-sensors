@@ -2,6 +2,7 @@
  *  This class encapsulates the use of a HC-SR04 style sonar
  *  
  */
+#include <NewPing.h>
 
 class SonarArray {
 
