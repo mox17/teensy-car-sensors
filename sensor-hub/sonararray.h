@@ -4,6 +4,8 @@
  */
 #include <NewPing.h>
 
+#define MAX_NO_OF_SONAR 6
+
 class SonarArray {
 
 public:
@@ -24,7 +26,7 @@ public:
     static SonarArray* getInstance();
 
 private:
-    static const int MAX_PINS=6;
+    static const int MAX_PINS=MAX_NO_OF_SONAR;
     int m_noOfPins;
     int m_pins[MAX_PINS];
     NewPing *m_sensorArray[MAX_PINS];

@@ -18,6 +18,41 @@
 #define DATA_ESCAPE 0x7d
 #define DATA_FRAME 0x10
 
+size_t getPacketLength(packet &p)
+{
+    switch (p.hdr.cmd) 
+    {
+    case CMD_PING:  
+    case CMD_PONG:
+        return sizeof(pingpong);
+
+    case CMD_US_SET_SEQ:
+        return sizeof(sequence);
+
+    case CMD_US_STOP:
+    case CMD_US_START:
+        return sizeof(header);
+        
+    case CMD_US_STATUS:
+        return sizeof(distances);
+        
+    case CMD_ROT_STATUS:
+        return sizeof(rotation);
+        
+    case CMD_ROT_RESET:
+        return sizeof(header);
+    }
+    return 0;
+}
+
+void setPing(packet &packet, uint32_t val)
+{
+    packet.pp.hdr.dst = ADDR_RPI;
+    packet.pp.hdr.src = ADDR_TEENSY;
+    packet.pp.hdr.cmd = CMD_PING;
+    packet.pp.hdr.reserved = 0;
+    packet.pp.timestamp = val;
+}
 
 void serialPolling()
 {

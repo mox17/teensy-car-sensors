@@ -11,6 +11,7 @@
  * 
  */
 #include <Arduino.h>
+#include "sonararray.h"
 
 #define ADDR_RPI 1
 #define ADDR_TEENSY 2
@@ -34,75 +35,66 @@ enum {
   ROT_RIGHT
 };
 
-typedef struct _rotation 
+struct header
+{
+    byte dst;
+    byte src;
+    byte cmd;
+    byte reserved;
+};
+
+struct pingpong
+{
+    struct header hdr;
+    uint32_t timestamp;  
+};
+
+struct sequence
+{
+    struct header hdr;
+    byte sequence[4*MAX_NO_OF_SONAR];
+};
+
+struct distances
+{
+    struct header hdr;
+    uint16_t distances[MAX_NO_OF_SONAR];
+};
+
+struct rot_one
 {
     word speed;         //
     bool direction;    // forward
     byte reserved;
     uint32_t dist;     // since direction change
     uint32_t dist_abs; // absolute direction travelled
-} rotation;
-
-typedef union _SensorData 
-    {
-      uint32_t timestamp;    // PING & PONG
-      byte seq[24];          // SET_SEQ
-      uint32_t distances[6]; // US_STATUS
-      rotation rot[2];       // ROT_STATUS Left & Right
-    } SensorData;
-
-class Payload 
-{
-private:
-    byte dst;
-    byte src;
-    byte cmd;
-    byte reserved;
-    SensorData data;
-
-public:
-    size_t getPacketLength()
-    {
-        switch (cmd) 
-        {
-        case CMD_PING:  
-        case CMD_PONG:
-            return 4;
-            break;
-        case CMD_US_SET_SEQ:
-            return sizeof(Payload);
-            break;
-        case CMD_US_STOP:
-        case CMD_US_START:
-            return 4;
-            break;
-        case CMD_US_STATUS:
-            return 4+6*4;
-            break;
-        case CMD_ROT_STATUS:
-            return 4+12*2;
-            break;
-        case CMD_ROT_RESET:
-            return 4;
-            break;
-        }
-    }
-  
-    void setPing(uint32_t val)
-    {
-        dst = ADDR_RPI;
-        src = ADDR_TEENSY;
-        cmd = CMD_PING;
-        reserved = 0;
-        data.timestamp = val;
-    }
-  
 };
 
-class Packet 
+struct rotation
 {
-public:
-    
+    struct header hdr;
+    struct rot_one rot[2];
 };
+
+// This union is only for calculating max message size
+union payload
+{
+    struct pingpong pp;
+    struct sequence sq;
+    struct distances ds;
+    struct rotation rt;
+};
+
+#define MAX_MSG_SIZE sizeof(payload)
+
+typedef union 
+{
+    byte raw[MAX_MSG_SIZE];
+    struct header hdr;
+    struct pingpong pp;
+    struct sequence sq;
+    struct distances ds;
+    struct rotation rt;
+} packet;
 
 void serialPolling();
