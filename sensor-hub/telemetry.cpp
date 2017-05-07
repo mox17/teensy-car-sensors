@@ -107,3 +107,12 @@ void SerialSendPacket(uint16_t id, uint32_t value)
     SerialSendCrc();
     serialPort.flush();
 }
+
+void serviceSerial()
+{
+    int txRoom = Serial1.availableForWrite();
+    int rxRoom = Serial1.available();
+}
+
+
+

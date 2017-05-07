@@ -15,23 +15,20 @@ uint8_t hallPinR2=-1;
 bool leftSupported=false;
 bool rightSupported=false;
 
-bool forwardL;
-bool forwardR;
+volatile bool forwardL;
+volatile bool forwardR;
 
 void hallChangeL1();
 void hallChangeL2();
 void hallChangeR1();
 void hallChangeR2();
 
-void (*rotCallback)(uint8_t sensor, bool level, bool direction);
-
-void Rotation(uint8_t left1, uint8_t left2, uint8_t right1, uint8_t right2, void (*rotationReport)(uint8_t sensor, bool level, bool direction ))
+void Rotation(uint8_t left1, uint8_t left2, uint8_t right1, uint8_t right2)
 {
     hallPinL1 = left1;
     hallPinL2 = left2;
     hallPinR1 = right1;
     hallPinR2 = right2;
-    rotCallback = rotationReport;
 
     if ((hallPinL1 >= 0) && (hallPinL2 >= 0))
     {
@@ -54,43 +51,193 @@ void Rotation(uint8_t left1, uint8_t left2, uint8_t right1, uint8_t right2, void
     // Create ringbuffer for rotation measurements
 }
 
-bool RotationGetDirectionL()
+#define BUFSIZE 50
+volatile byte headL=0;
+volatile byte tailL=0;
+volatile byte headR=0;
+volatile byte tailR=0;
+volatile uint32_t overflow=false;
+volatile uint32_t rotCountL=0;
+volatile uint32_t rotCountR=0;
+// Because of the limited RAM on Teensy LC this is rotEvent data is split to avoid alignment waste.
+uint32_t bufWhenL[BUFSIZE];
+uint32_t bufCountL[BUFSIZE];
+bool     bufDirectionL[BUFSIZE];
+uint32_t bufWhenR[BUFSIZE];
+uint32_t bufCountR[BUFSIZE];
+bool     bufDirectionR[BUFSIZE];
+
+bool rotAddRingBufL(uint32_t time, uint32_t count, bool dir)
 {
-    return forwardL;
+    uint8_t h;
+
+    h = headL + 1;
+    if (h >= BUFSIZE)
+    {
+        h = 0;
+    }
+    if (h != tailL) 
+    {                // if the buffer isn't full
+        bufWhenL[h] = time;
+        bufCountL[h] = count;
+        bufDirectionL[h] = dir;            // put new data into buffer
+        headL = h;
+        return true;
+    }
+    else 
+    {
+        overflow = true;
+        return false;
+    }
 }
 
-bool RotationGetDirectionR()
+bool rotAddRingBufR(uint32_t time, uint32_t count, bool dir)
 {
-    return forwardR;
+    uint8_t h;
+
+    h = headR + 1;
+    if (h >= BUFSIZE)
+    {
+        h = 0;
+    }
+    if (h != tailR) 
+    {                // if the buffer isn't full
+        bufWhenR[h] = time;
+        bufCountR[h] = count;
+        bufDirectionR[h] = dir;            // put new data into buffer
+        headR = h;
+        return true;
+    }
+    else 
+    {
+        overflow = true;
+        return false;
+    }
 }
 
-// Extract event from buffer
-bool getRotEventL(struct rotEvent &event)
+bool rotGetEventL(struct rotEvent &event)
 {
-  
+    uint8_t h, t;
+    if (headL==tailL) 
+    {
+        return false;
+    }
+
+    do {
+        h = headL;
+        t = tailL;                   // wait for data in buffer
+    } while (h == t);
+    if (++t >= BUFSIZE)
+    {
+        t = 0;
+    }
+    event.when = bufWhenL[t];                // remove 1 sample from buffer
+    event.count = bufCountL[t];
+    event.direction = bufDirectionL[t];
+    tailR = t;
+    return true;
 }
 
-bool getRotEventR(struct rotEvent &event)
+bool rotGetEventR(struct rotEvent &event)
 {
-  
+    uint8_t h, t;
+    if (headR==tailR) 
+    {
+        return false;
+    }
+
+    do {
+        h = headR;
+        t = tailR;                   // wait for data in buffer
+    } while (h == t);
+    if (++t >= BUFSIZE)
+    {
+        t = 0;
+    }
+    event.when = bufWhenR[t];                // remove 1 sample from buffer
+    event.count = bufCountR[t];
+    event.direction = bufDirectionR[t];
+    tailR = t;
+    return true;
 }
 
-// Number of events in buffer (left and right)
-int rotEventCountL()
+uint32_t rotCheckOverflow()
 {
-  
+    uint32_t ret = overflow;
+    overflow = 0;
+    return ret;
 }
 
-int rotEventCountR(){
-  
+RotCalc::RotCalc(bool side) :
+m_wHead(0),
+m_wTail(0),
+m_newData(false)
+{
+    m_window = new rotEvent[avgCount];
 }
 
+/*
+ * Handle ringbuffers from ISRs
+ */
+bool RotCalc::calculate()
+{
+    bool data;
+    struct rotEvent rec;
+    bool newData = false;
+
+    m_latest = millis();
+    while ((data = (m_side ? rotGetEventL(rec) :  rotGetEventR(rec))))
+    {
+        m_wHead++;
+        if (m_wHead >= avgCount)
+        {
+            m_wHead = 0;
+        }
+        m_window[m_wHead] = rec;
+        m_latest = rec.when;
+        newData = true;
+    }
+    m_wTail = m_wHead+1;
+    if (m_wTail > avgCount)
+    {
+        m_wTail = 0;
+    }
+    m_deltaPulse = m_window[m_wHead].count - m_window[m_wTail].count;
+    m_deltaMillis = m_latest - m_window[m_wTail].when;
+    m_odometer = m_window[m_wHead].count;
+    return newData;
+}
+
+float RotCalc::pulsePerSec()
+{
+    calculate();
+    return ((float)m_deltaPulse) / ((float)m_deltaMillis);
+}
+
+uint32_t RotCalc::odometer()
+{
+    calculate();
+    return m_odometer;
+}
+
+bool RotCalc::direction()
+{
+    return m_window[m_wHead].direction;
+}
+
+bool RotCalc::newData()
+{
+    bool ret = m_newData;
+    m_newData = false;
+    return ret;
+}
 
 // ISR 
 void hallChangeL1() 
 {
     hStatusL1 = digitalRead(hallPinL1);
-    rotCallback(0, hStatusL1, forwardL);
+    rotCountL++;
+    rotAddRingBufL(millis(), rotCountL, forwardL);
 }
 
 // ISR 
@@ -98,14 +245,16 @@ void hallChangeL2()
 {
     hStatusL2 = digitalRead(hallPinL2);
     forwardL = hStatusL1 == hStatusL2;
-    rotCallback(1, hStatusL2, forwardL);
+    rotCountL++;
+    rotAddRingBufL(millis(), rotCountL, forwardL);
 }
 
 // ISR 
 void hallChangeR1() 
 {
     hStatusR1 = digitalRead(hallPinR1);
-    rotCallback(2, hStatusR1, forwardR);
+    rotCountR++;
+    rotAddRingBufR(millis(), rotCountR, forwardR);
 }
 
 // ISR 
@@ -113,6 +262,6 @@ void hallChangeR2()
 {
     hStatusR2 = digitalRead(hallPinR2);
     forwardR = hStatusR1 == hStatusR2;
-    rotCallback(3, hStatusR2, forwardR);
+    rotCountR++;
+    rotAddRingBufR(millis(), rotCountR, forwardR);
 }
-

@@ -33,7 +33,7 @@ private:
     int m_maxDistance;
     int m_sequence[4*MAX_PINS];  // a sequence of up to 24
     int m_seqLen;   // Length of current sequence
-    int m_current;  // index into sequence
+    volatile int m_current;  // index into sequence
     sonarState m_state=SONAR_STOPPED;
     static SonarArray *m_instance;
 };

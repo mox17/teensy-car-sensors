@@ -18,7 +18,7 @@ SonarArray::SonarArray(int noOfPins, const int* pins, int maxDistance, void(*rep
     for (int i=0; i < noOfPins; i++) 
     {
         m_pins[i] = pins[i];
-        m_sensorArray[i] = new NewPing(m_pins[i], m_pins[i] /*, maxDistance*/);
+        m_sensorArray[i] = new NewPing(m_pins[i], m_pins[i], maxDistance);
         m_sequence[i] = i;
     }
     m_report = report;
@@ -42,7 +42,7 @@ void SonarArray::startSonar()
             m_current = 0;
         }
         sensorId = m_sequence[m_current];
-        //Serial.println(sensorId);
+        Serial.print(sensorId);
         SonarArray::m_currentSensor = m_sensorArray[sensorId];
         SonarArray::m_currentSensor->ping_timer(sonarEchoCheck);
         m_state = SONAR_PING_SENT;

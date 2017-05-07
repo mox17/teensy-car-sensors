@@ -3,7 +3,6 @@
  */
 #include "sonararray.h"
 #include "rotation.h"
-#include <RingBuf.h>
 
 // Hall-effect pin configuration
 const int ledPin   = 13;  // Flash LED on hall-effect state change 
@@ -11,7 +10,6 @@ const int hallPinL1 = 5;
 const int hallPinL2 = 6;
 const int hallPinR1 = -1;
 const int hallPinR2 = -1;
-void rotationReport(uint8_t sensor, bool level, bool direction );
 
 // Hall effect variables
 volatile int tCount = 0;      // Total state changes
@@ -27,6 +25,7 @@ const int sonarPins[] = {ultraSound1TrigPin, ultraSound2TrigPin, ultraSound3Trig
 const int sonarCount = 3;//sizeof(sonarPins)/sizeof(sonarPins[0]);
 
 unsigned int sonarResults[6] = {0};  // Raw timing data in microseconds
+unsigned int sonarCounts[6] = {0}; // Number of reports
 int sonarUpdate = 0;         // sonar event counter
 SonarArray *sa;
 
@@ -44,29 +43,38 @@ void setup()
     Serial.begin(115200);
     pinMode(ledPin, OUTPUT);
   
-    Rotation(hallPinL1, hallPinL2, hallPinR1, hallPinR2, rotationReport);
+    Serial.println("Hello");
+    Rotation(hallPinL1, hallPinL2, hallPinR1, hallPinR2);
+    Serial.println("Hello1");
     loopTimer = millis(); // Start now.
   
     sonarSetup();
+    Serial.println("Hello2");
+
     sa->startSonar();
     // Control ultrasound sensor sequencing
-    int sequence[] = {2,1,1,0,0,0,1,1};
+    //int sequence[] = {2,1,1,0,0,0,1,1};
     //sa->setSequence(8, sequence);
+    Serial.println("Hello3");
 }
 
-int rotTrack = 0;
 int sonarTrack = 0;
 unsigned rotationUpdate=0;
 
+RotCalc rotLeft = RotCalc(false);
+RotCalc rotRight = RotCalc(true);
+
 void loop()                     
 {
-    bool rotation = rotTrack != tCount;
     bool sonar = sonarTrack != sonarUpdate;
+
+    //Serial.println(__FUNCTION__);
+    rotLeft.calculate();
+    rotRight.calculate();
   
     // Display when new data is available
-    if (rotation || sonar) {
+    if (rotLeft.newData() || rotRight.newData() || sonar) {
         rotationStatus();
-        rotTrack = tCount;
         sonarStatus();
         sonarTrack = sonarUpdate;
         Serial.println("");
@@ -84,9 +92,9 @@ void rotationStatus()
 {
     rotationUpdate = millis();
     Serial.print(" ");
-    Serial.print(RotationGetDirectionL());
+    Serial.print(rotLeft.direction());
     Serial.print(" ");
-    Serial.print(tCount);
+    Serial.print(rotLeft.odometer());
 }
 
 void sonarStatus()
@@ -94,31 +102,15 @@ void sonarStatus()
     for (int i=0;i < sonarCount; i++) {
         Serial.print(" ");
         Serial.print(sonarResults[i] / US_ROUNDTRIP_CM); // Ping returned, uS result in ping_result, convert to cm with US_ROUNDTRIP_CM.
+        Serial.print(" cm ");
+        Serial.print(sonarCounts[i]);
     }
-    Serial.print("cm");
 }
 
 // Callback from sonar timer handler - be quick!
 void sonarReport(int id, int value, unsigned long time_in_ms)
 {
     sonarResults[id] = value;
+    sonarCounts[id]++;
     sonarUpdate++;
 }
-
-
-// Callback from interrupt handler - be quick
-void rotationReport(uint8_t sensor, bool level, bool direction )
-{
-    tCount++;
-    digitalWrite(ledPin, tCount & 1);
-
-    if (2 & sensor)
-    {
-        // Right hand side
-    }
-    else
-    {
-        // Left hand side
-    }
-}
-
