@@ -224,16 +224,16 @@ bool RotCalc::calculate()
     }
     if (newData)
     {
-        // ISR buffer is emptied (transferred to m_window)
+        // ISR buffer is emptied (transferred to m_window). Calculate speed.
         if (m_wCount == 1)
         {
-            m_deltaPulse  = m_window[newest].count;
+            m_deltaPulse  = 0;
             m_deltaMillis = m_latest - m_window[newest].when;
         }
         else
         {
             m_deltaPulse  = m_window[newest].count - m_window[oldest].count;
-            m_deltaMillis = m_latest - m_window[oldest].when;
+            m_deltaMillis = m_latest - m_window[oldest].when; // Time window is from oldest sample to now
         }
         m_odometer    = m_window[newest].count;
         /*
