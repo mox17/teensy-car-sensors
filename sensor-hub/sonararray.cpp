@@ -43,7 +43,7 @@ void SonarArray::startSonar()
             m_current = 0;
         }
         sensorId = m_sequence[m_current];
-        Serial1.print(char(48+sensorId));
+        //Serial1.print(char(48+sensorId));
         SonarArray::m_currentSensor = m_sensorArray[sensorId];
         SonarArray::m_currentSensor->ping_timer(sonarEchoCheck);
         m_state = SONAR_PING_SENT;
@@ -90,7 +90,7 @@ void sonarEchoCheck()
     }
     else if (ct == PING_TIMEOUT)
     {
-        Serial1.print('T');
+        //Serial1.print('T');
         SonarArray::getInstance()->nextSonar();
     }
 }

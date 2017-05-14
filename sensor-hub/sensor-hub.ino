@@ -11,11 +11,6 @@ const int hallPinL2 = 6;
 const int hallPinR1 = -1;
 const int hallPinR2 = -1;
 
-// Hall effect variables
-volatile int tCount = 0;      // Total state changes
-volatile bool forward = true; // Determined from phase between two sensors (overlapping pulses from sensors expected)
-
-
 // Sonar setup
 const int maxDistance = 200; // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
 const int ultraSound1TrigPin = 10; 
@@ -95,6 +90,8 @@ void rotationStatus()
     Serial.print(rotLeft.direction());
     Serial.print(" ");
     Serial.print(rotLeft.odometer());
+    Serial.print(" ");
+    Serial.print(rotLeft.pulsePerSec());
 }
 
 void sonarStatus()
