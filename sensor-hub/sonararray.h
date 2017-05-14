@@ -2,7 +2,7 @@
  *  This class encapsulates the use of a HC-SR04 style sonar
  *  
  */
-#include <NewPing.h>
+#include "ESPing.h"
 
 #define MAX_NO_OF_SONAR 6
 
@@ -35,7 +35,7 @@ private:
     int m_seqLen;   // Length of current sequence
     volatile int m_current;  // index into sequence
     sonarState m_state=SONAR_STOPPED;
-    static SonarArray *m_instance;
+    static SonarArray *m_instance; // This class is a singleton
 };
 
 

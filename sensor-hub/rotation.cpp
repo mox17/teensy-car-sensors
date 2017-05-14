@@ -47,8 +47,6 @@ void Rotation(uint8_t left1, uint8_t left2, uint8_t right1, uint8_t right2)
         attachInterrupt(digitalPinToInterrupt(hallPinR1), hallChangeR1, CHANGE);
         attachInterrupt(digitalPinToInterrupt(hallPinR2), hallChangeR2, CHANGE);
     }
-
-    // Create ringbuffer for rotation measurements
 }
 
 #define BUFSIZE 50
@@ -60,28 +58,31 @@ volatile uint32_t overflow=false;
 volatile uint32_t rotCountL=0;
 volatile uint32_t rotCountR=0;
 // Because of the limited RAM on Teensy LC this is rotEvent data is split to avoid alignment waste.
-uint32_t bufWhenL[BUFSIZE];
-uint32_t bufCountL[BUFSIZE];
-bool     bufDirectionL[BUFSIZE];
-uint32_t bufWhenR[BUFSIZE];
-uint32_t bufCountR[BUFSIZE];
-bool     bufDirectionR[BUFSIZE];
+volatile uint32_t bufWhenL[BUFSIZE];
+volatile uint32_t bufCountL[BUFSIZE];
+volatile bool     bufDirectionL[BUFSIZE];
+volatile uint32_t bufWhenR[BUFSIZE];
+volatile uint32_t bufCountR[BUFSIZE];
+volatile bool     bufDirectionR[BUFSIZE];
 
+/*
+ * This function is called from interrupt context
+ */
 bool rotAddRingBufL(uint32_t time, uint32_t count, bool dir)
 {
-    uint8_t h;
+    uint8_t t;
 
-    h = headL + 1;
-    if (h >= BUFSIZE)
+    t = tailL + 1;
+    if (t >= BUFSIZE)
     {
-        h = 0;
+        t = 0;
     }
-    if (h != tailL) 
+    if (t != headL) 
     {                // if the buffer isn't full
-        bufWhenL[h] = time;
-        bufCountL[h] = count;
-        bufDirectionL[h] = dir;            // put new data into buffer
-        headL = h;
+        tailL = t;
+        bufWhenL[t] = time;
+        bufCountL[t] = count;
+        bufDirectionL[t] = dir;            // put new data into buffer
         return true;
     }
     else 
@@ -91,21 +92,24 @@ bool rotAddRingBufL(uint32_t time, uint32_t count, bool dir)
     }
 }
 
+/*
+ * This function is called from interrupt context
+ */
 bool rotAddRingBufR(uint32_t time, uint32_t count, bool dir)
 {
-    uint8_t h;
+    uint8_t t;
 
-    h = headR + 1;
-    if (h >= BUFSIZE)
+    t = tailR + 1;
+    if (t >= BUFSIZE)
     {
-        h = 0;
+        t = 0;
     }
-    if (h != tailR) 
+    if (t != headR) 
     {                // if the buffer isn't full
-        bufWhenR[h] = time;
-        bufCountR[h] = count;
-        bufDirectionR[h] = dir;            // put new data into buffer
-        headR = h;
+        tailR = t;
+        bufWhenR[t] = time;
+        bufCountR[t] = count;
+        bufDirectionR[t] = dir;            // put new data into buffer
         return true;
     }
     else 
@@ -117,47 +121,39 @@ bool rotAddRingBufR(uint32_t time, uint32_t count, bool dir)
 
 bool rotGetEventL(struct rotEvent &event)
 {
-    uint8_t h, t;
+    uint8_t h;
     if (headL==tailL) 
     {
         return false;
     }
-
-    do {
-        h = headL;
-        t = tailL;                   // wait for data in buffer
-    } while (h == t);
-    if (++t >= BUFSIZE)
+    h = headL;
+    if (++h >= BUFSIZE)
     {
-        t = 0;
+        h = 0;
     }
-    event.when = bufWhenL[t];                // remove 1 sample from buffer
-    event.count = bufCountL[t];
-    event.direction = bufDirectionL[t];
-    tailR = t;
+    event.when = bufWhenL[h];          // remove 1 sample from buffer
+    event.count = bufCountL[h];
+    event.direction = bufDirectionL[h];
+    headL = h;
     return true;
 }
 
 bool rotGetEventR(struct rotEvent &event)
 {
-    uint8_t h, t;
+    uint8_t h;
     if (headR==tailR) 
     {
         return false;
     }
-
-    do {
-        h = headR;
-        t = tailR;                   // wait for data in buffer
-    } while (h == t);
-    if (++t >= BUFSIZE)
+    h = headR;
+    if (++h >= BUFSIZE)
     {
-        t = 0;
+        h = 0;
     }
-    event.when = bufWhenR[t];                // remove 1 sample from buffer
-    event.count = bufCountR[t];
-    event.direction = bufDirectionR[t];
-    tailR = t;
+    event.when = bufWhenR[h];         // remove 1 sample from buffer
+    event.count = bufCountR[h];
+    event.direction = bufDirectionR[h];
+    headR = h;
     return true;
 }
 
@@ -168,7 +164,7 @@ uint32_t rotCheckOverflow()
     return ret;
 }
 
-RotCalc::RotCalc(bool side) :
+RotCalc::RotCalc(RotSide side) :
 m_wHead(0),
 m_wTail(0),
 m_newData(false)
@@ -177,7 +173,7 @@ m_newData(false)
 }
 
 /*
- * Handle ringbuffers from ISRs
+ * Process data put in ringbuffers by ISRs
  */
 bool RotCalc::calculate()
 {
@@ -186,25 +182,35 @@ bool RotCalc::calculate()
     bool newData = false;
 
     m_latest = millis();
-    while ((data = (m_side ? rotGetEventL(rec) :  rotGetEventR(rec))))
+    while ((data = ((m_side == ROT_LEFT) ? rotGetEventL(rec) : rotGetEventR(rec))))
     {
-        m_wHead++;
-        if (m_wHead >= avgCount)
+        m_wTail++;
+        if (m_wTail >= avgCount)
         {
-            m_wHead = 0;
+            m_wTail = 0;
         }
-        m_window[m_wHead] = rec;
+        // If buffer full, discard old entries
+        if (m_wTail == m_wHead) 
+        {
+            m_wHead = m_wHead+1;
+            if (m_wHead >= avgCount)
+            {
+                m_wHead = 0;
+            }
+        }
+        m_window[m_wTail] = rec;
         m_latest = rec.when;
+        Serial1.print('c');
         newData = true;
     }
-    m_wTail = m_wHead+1;
-    if (m_wTail > avgCount)
+    if (newData)
     {
-        m_wTail = 0;
+        Serial1.print('-');
+        // ISR buffer is emptied (transferred to m_window)
+        m_deltaPulse = m_window[m_wTail].count - m_window[m_wHead].count;
+        m_deltaMillis = m_latest - m_window[m_wTail].when;
+        m_odometer = m_window[m_wTail].count;
     }
-    m_deltaPulse = m_window[m_wHead].count - m_window[m_wTail].count;
-    m_deltaMillis = m_latest - m_window[m_wTail].when;
-    m_odometer = m_window[m_wHead].count;
     return newData;
 }
 

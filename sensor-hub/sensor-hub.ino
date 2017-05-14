@@ -24,12 +24,11 @@ const int ultraSound3TrigPin = 12;
 const int sonarPins[] = {ultraSound1TrigPin, ultraSound2TrigPin, ultraSound3TrigPin};
 const int sonarCount = 3;//sizeof(sonarPins)/sizeof(sonarPins[0]);
 
-unsigned int sonarResults[6] = {0};  // Raw timing data in microseconds
+unsigned int sonarResults[6] = {0};// Raw timing data in microseconds
 unsigned int sonarCounts[6] = {0}; // Number of reports
-int sonarUpdate = 0;         // sonar event counter
+volatile int sonarUpdate = 0;      // sonar event counter - updated from interrupt context
 SonarArray *sa;
 
-// General purpose variable
 unsigned loopTimer;
 
 void sonarSetup()
@@ -40,16 +39,18 @@ void sonarSetup()
 
 void setup() 
 {
+    // Setup serial to RPi
+    Serial1.begin(115200);
+    Serial1.println("testing...");
+
     Serial.begin(115200);
     pinMode(ledPin, OUTPUT);
   
-    Serial.println("Hello");
     Rotation(hallPinL1, hallPinL2, hallPinR1, hallPinR2);
     Serial.println("Hello1");
     loopTimer = millis(); // Start now.
   
     sonarSetup();
-    Serial.println("Hello2");
 
     sa->startSonar();
     // Control ultrasound sensor sequencing
@@ -61,14 +62,13 @@ void setup()
 int sonarTrack = 0;
 unsigned rotationUpdate=0;
 
-RotCalc rotLeft = RotCalc(false);
-RotCalc rotRight = RotCalc(true);
+RotCalc rotLeft = RotCalc(ROT_LEFT);
+RotCalc rotRight = RotCalc(ROT_RIGHT);
 
 void loop()                     
 {
-    bool sonar = sonarTrack != sonarUpdate;
+    bool sonar = (sonarTrack != sonarUpdate);
 
-    //Serial.println(__FUNCTION__);
     rotLeft.calculate();
     rotRight.calculate();
   
@@ -83,8 +83,8 @@ void loop()
     // This is needed to restart the measuring sequence if a sensor fails to return a result.
     if ((millis() - rotationUpdate) > 100)
     {
-        Serial.println("restart sonar");
-        sa->startSonar();
+        //Serial.println("restart sonar");
+        //sa->startSonar();
     }
 }
 
@@ -110,6 +110,7 @@ void sonarStatus()
 // Callback from sonar timer handler - be quick!
 void sonarReport(int id, int value, unsigned long time_in_ms)
 {
+    Serial1.print(char(48+id));
     sonarResults[id] = value;
     sonarCounts[id]++;
     sonarUpdate++;

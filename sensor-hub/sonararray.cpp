@@ -2,13 +2,16 @@
  *  This class encapsulates the use of a HC-SR04 style sonar
  *  
  */
-#include <NewPing.h>
+#include "ESPing.h"
 #include "sonararray.h"
+
+void sonarEchoCheck();
 
 NewPing* SonarArray::m_currentSensor;                                     // Pointer to current sensor - for use in callback
 void(*SonarArray::m_report)(int id, int value, unsigned long time_in_ms); // reporting function
 int sensorId;                                                             // ID to use from callback
 SonarArray * SonarArray::m_instance;                                      // Getting the instance from interrupt
+IntervalTimer sonarInterval;
 
 SonarArray::SonarArray(int noOfPins, const int* pins, int maxDistance, void(*report)(int id, int value, unsigned long time_in_ms))
 {
@@ -30,8 +33,6 @@ SonarArray* SonarArray::getInstance()
     return m_instance;
 }
 
-void sonarEchoCheck();
-
 void SonarArray::startSonar()
 {
     if (m_seqLen > 0) 
@@ -42,7 +43,7 @@ void SonarArray::startSonar()
             m_current = 0;
         }
         sensorId = m_sequence[m_current];
-        Serial.print(sensorId);
+        Serial1.print(char(48+sensorId));
         SonarArray::m_currentSensor = m_sensorArray[sensorId];
         SonarArray::m_currentSensor->ping_timer(sonarEchoCheck);
         m_state = SONAR_PING_SENT;
@@ -75,15 +76,22 @@ void SonarArray::setSequence(int length, int seq[])
 
 bool SonarArray::sonarRunning()
 {
-  return (m_state == SONAR_IDLE || m_state == SONAR_PING_SENT);
+    return (m_state == SONAR_IDLE || m_state == SONAR_PING_SENT);
 }
 
 void sonarEchoCheck() 
 { // Timer2 interrupt calls this function every 24uS where you can check the ping status.
-  if (SonarArray::m_currentSensor->check_timer()) 
-  {
-      SonarArray::m_report(sensorId, SonarArray::m_currentSensor->ping_result, millis());
-      SonarArray::getInstance()->nextSonar();
-  }
+    PingTimerReturn ct = SonarArray::m_currentSensor->check_timer();
+    if (ct == PING_ECHO)
+    {
+        Serial1.print('E');
+        SonarArray::m_report(sensorId, SonarArray::m_currentSensor->ping_result, millis());
+        SonarArray::getInstance()->nextSonar();
+    }
+    else if (ct == PING_TIMEOUT)
+    {
+        Serial1.print('T');
+        SonarArray::getInstance()->nextSonar();
+    }
 }
 
