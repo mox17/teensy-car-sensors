@@ -60,7 +60,7 @@ unsigned rotationUpdate=0;
 RotCalc rotLeft = RotCalc(ROT_LEFT);
 RotCalc rotRight = RotCalc(ROT_RIGHT);
 
-void loop()                     
+void loop()
 {
     bool sonar = (sonarTrack != sonarUpdate);
 

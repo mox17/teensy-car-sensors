@@ -2,6 +2,7 @@
  *  This class encapsulates the use of a HC-SR04 style sonar
  *  
  */
+#pragma once
 #include "ESPing.h"
 
 #define MAX_NO_OF_SONAR 6

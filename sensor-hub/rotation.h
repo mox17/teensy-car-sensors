@@ -3,6 +3,7 @@
  *  Two sensors per wheel.
  *  
  */
+#pragma once
 #include "common.h"
 
 void Rotation(uint8_t left1,  uint8_t left2, 

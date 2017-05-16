@@ -11,6 +11,7 @@
  * data = 0 or more bytes
  * 
  */
+#pragma once
 #include <Arduino.h>
 #include "common.h"
 #include "sonararray.h"
@@ -21,12 +22,12 @@
 
 enum command 
 {
-    CMD_PING       = 1,  // 4 bytes payload (time stamp for example)
-    CMD_PONG       = 2,  // 4 byte payload from ping is copied back.
+    CMD_PING       = 1,  // timestamp exchange
+    CMD_PONG       = 2,  // timestamp exchange
     CMD_US_SET_SEQ = 3,  // up to 24 bytes. unused bytes are 0xff
     CMD_US_STOP    = 4,  // Stop Ultrasound sensors
     CMD_US_START   = 5,  // Start Ultrasound sensors 
-    CMD_US_STATUS  = 6,  // 6 distances (cm, 16bit)
+    CMD_US_STATUS  = 6,  // sensor id + distance
     CMD_ROT_STATUS = 7,  // direction, speed, odo
     CMD_ROT_RESET  = 8   // Clear odometer
 };
