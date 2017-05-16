@@ -163,7 +163,7 @@ bool getPacketByte(byte &b)
     switch (txState)
     {
     case TS_BEGIN:
-        b = DATA_FRAME;
+        b = START_STOP;
         txState = TS_DATA;
         break;
     case TS_DATA:
@@ -188,7 +188,7 @@ bool getPacketByte(byte &b)
         break;
     case TS_END:
         // TODO: add call here to check for next buffer. Possibly skip extra framing.
-        b = DATA_FRAME;
+        b = START_STOP;
         txState = TS_IDLE;
         break;
     case TS_IDLE:
