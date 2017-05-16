@@ -44,7 +44,7 @@ size_t getPacketLength(packet &p)
         return sizeof(header);
         
     case CMD_US_STATUS:
-        return sizeof(distances);
+        return sizeof(distance);
         
     case CMD_ROT_STATUS:
         return sizeof(rotation);
@@ -61,7 +61,8 @@ void setPing(packet &packet, uint32_t val)
     packet.pp.hdr.src = ADDR_TEENSY;
     packet.pp.hdr.cmd = CMD_PING;
     packet.pp.hdr.reserved = 0;
-    packet.pp.timestamp = val;
+    packet.pp.timestamp1 = val;
+    packet.pp.timestamp2 = 0;
 }
 
 void serialPolling()
@@ -97,6 +98,13 @@ void SerialSendByte(uint8_t b)
     txCrc &= 0x00ff;
 }
 
+inline void crcUpdate(b)
+{
+    txCrc += b; //0-1FF
+    txCrc += ( txCrc >> 8 ); //0-100
+    txCrc &= 0x00ff;
+}
+
 void SerialSendCrc() 
 {
     SerialTransmitByte( 0xFF-txCrc );
@@ -118,10 +126,87 @@ void SerialSendPacket(uint16_t id, uint32_t value)
     serialPort.flush();
 }
 
+enum transmitStates {
+    TS_BEGIN,  // Nothing sent yet, deliver 0x7e
+    TS_DATA,   // Sending normal data
+    TS_ESCAPE, // Escape has been sent, escByte is next
+    TS_CHKSUM, // Last data byte sent, checksum is next
+    TS_END,    // Checksum sent, frame is next. Can be skipped if there is a next packet in queue
+    TS_IDLE,   // No data to transmit.
+};
+
+
+packet *currentPacket;
+uint16_t totalSize;
+uint16_t currentOffset;
+transmitStates txState = TS_BEGIN;
+byte escByte;
+
+bool sendPacket(packet &p)
+{
+    if (currentPacket) 
+    {
+        return false;
+    }
+    currentPacket = p;
+    currentOffset = 0;
+    totalSize = getPacketLength(p);
+    txCrc = 0;
+}
+
+/*
+ * Pull bytes one-by-one from buffer with framing, stuffing and checksum calculation
+ */
+bool getPacketByte(byte &b)
+{
+    bool ret = true;
+    switch (txState)
+    {
+    case TS_BEGIN:
+        b = DATA_FRAME;
+        txState = TS_DATA;
+        break;
+    case TS_DATA:
+        b = currentPacket[currentOffset++];
+        if ((b == 0x7d)||(b == 0x7e))
+        {
+            escByte = b ^ 0x20;
+            b = 0x7d;
+        }
+        else 
+        {
+            txState = (currentOffset < totalSize) ? TS_DATA : TS_CHKSUM;
+        }
+        break;
+    case TS_ESCAPE:
+        b = escByte;
+        txState = (currentOffset < totalSize) ? TS_DATA : TS_CHKSUM;
+        break;
+    case TS_CHKSUM:
+        b = txCrc;
+        txState = TS_END;
+        break;
+    case TS_END:
+        // TODO: add call here to check for next buffer. Possibly skip extra framing.
+        b = DATA_FRAME;
+        txState = TS_IDLE;
+        break;
+    case TS_IDLE:
+        return false;
+    }
+    crcUpdate(b);
+    return ret;
+}
+
 void serviceSerial()
 {
     int txRoom = Serial1.availableForWrite();
     int rxRoom = Serial1.available();
+    
+    while (txRoom > 0) 
+    {
+        
+    }
 }
 
 
