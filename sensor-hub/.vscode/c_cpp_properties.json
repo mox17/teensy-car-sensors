@@ -1,0 +1,16 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "/home/erling/.arduino15/packages/arduino/hardware/samd/1.6.15/cores/arduino"
+            ],
+            "browse": {
+                "limitSymbolsToIncludedHeaders": false,
+                "path": [
+                    "/home/erling/.arduino15/packages/arduino/hardware/samd/1.6.15/cores/arduino"
+                ]
+            }
+        }
+    ]
+}

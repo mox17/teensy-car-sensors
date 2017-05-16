@@ -1,21 +1,23 @@
 /* 
  * Data message formats
- * | 7e | dest | src | cmd | reserved | data ... | chksum | 7e |
+ * | 0x7e | dest | src | cmd | reserved | data ... | chksum | 0x7e |
  * 
- * Wire format has 7e and checksum. these are removed at reception. 
+ * Wire format has 0x7e and checksum. these are removed at reception. 
  * Packets with wrong checksum are dropped and error counter increased.
  * 
- * dest, src = address. RPi = 1. Teensy = 2, ALL = 255, invalid = 0
- * reserved = 0 (filler byte)
+ * dest, src = address. RPi = 0x01. Teensy = 0x02, ALL = 0xff, invalid = 0x00
+ * cmd = command opcode, see enumeration below.
+ * reserved = 0x00 (filler byte)
  * data = 0 or more bytes
  * 
  */
 #include <Arduino.h>
+#include "common.h"
 #include "sonararray.h"
 
-#define ADDR_RPI 1
-#define ADDR_TEENSY 2
-#define ADDR_ALL 255
+#define ADDR_RPI    0x01
+#define ADDR_TEENSY 0x02
+#define ADDR_ALL    0xff
 
 enum command 
 {
@@ -27,12 +29,6 @@ enum command
     CMD_US_STATUS  = 6,  // 6 distances (cm, 16bit)
     CMD_ROT_STATUS = 7,  // direction, speed, odo
     CMD_ROT_RESET  = 8   // Clear odometer
-};
-
-// For indexing rot fird in payload
-enum {
-  ROT_LEFT,
-  ROT_RIGHT
 };
 
 struct header
@@ -63,9 +59,9 @@ struct distances
 
 struct rot_one
 {
-    word speed;         //
-    bool direction;    // forward
-    byte reserved;
+    word speed;        // Pulses per second (lowest possible speed is 20 seconds for one wheel revolution)
+    byte direction;    // enumeration rotDirection is used
+    byte reserved;     // Filler for alignment
     uint32_t dist;     // since direction change
     uint32_t dist_abs; // absolute direction travelled
 };
@@ -73,7 +69,7 @@ struct rot_one
 struct rotation
 {
     struct header hdr;
-    struct rot_one rot[2];
+    struct rot_one rot[2]; // Indexed with enumeration rotSide
 };
 
 // This union is only for calculating max message size
@@ -87,6 +83,9 @@ union payload
 
 #define MAX_MSG_SIZE sizeof(payload)
 
+/*
+ * This union contains all possible messages.
+ */
 typedef union 
 {
     byte raw[MAX_MSG_SIZE];

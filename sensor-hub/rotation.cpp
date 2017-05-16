@@ -14,8 +14,8 @@ uint8_t hallPinR2=-1;
 bool leftSupported=false;
 bool rightSupported=false;
 
-volatile RotDir forwardL;
-volatile RotDir forwardR;
+volatile rotDirection forwardL;
+volatile rotDirection forwardR;
 
 void hallChangeL1();
 void hallChangeL2();
@@ -59,10 +59,10 @@ volatile uint32_t rotCountR=0;
 // Because of the limited RAM on Teensy LC this rotation data is split to avoid alignment waste.
 volatile uint32_t bufWhenL[BUFSIZE];
 volatile uint32_t bufCountL[BUFSIZE];
-volatile RotDir   bufDirectionL[BUFSIZE];
+volatile rotDirection   bufDirectionL[BUFSIZE];
 volatile uint32_t bufWhenR[BUFSIZE];
 volatile uint32_t bufCountR[BUFSIZE];
-volatile RotDir   bufDirectionR[BUFSIZE];
+volatile rotDirection   bufDirectionR[BUFSIZE];
 
 volatile byte rStateL=0;
 volatile byte rStateR=0;
@@ -70,7 +70,7 @@ volatile byte rStateR=0;
 /*
  * This function is called from interrupt context
  */
-bool rotAddRingBufL(uint32_t time, uint32_t count, RotDir dir)
+bool rotAddRingBufL(uint32_t time, uint32_t count, rotDirection dir)
 {
     uint8_t t;
 
@@ -98,7 +98,7 @@ bool rotAddRingBufL(uint32_t time, uint32_t count, RotDir dir)
 /*
  * This function is called from interrupt context
  */
-bool rotAddRingBufR(uint32_t time, uint32_t count, RotDir dir)
+bool rotAddRingBufR(uint32_t time, uint32_t count, rotDirection dir)
 {
     uint8_t t;
 
@@ -167,7 +167,7 @@ uint32_t rotCheckOverflow()
     return ret;
 }
 
-RotCalc::RotCalc(RotSide side) :
+RotCalc::RotCalc(rotSide side) :
 m_wHead(avgCount-1),
 m_wTail(0),
 m_wCount(0),
@@ -277,7 +277,7 @@ uint32_t RotCalc::odometer()
     return m_odometer;
 }
 
-RotDir RotCalc::direction()
+rotDirection RotCalc::direction()
 {
     return m_direction;
 }
@@ -292,10 +292,10 @@ bool RotCalc::newData()
 /*
  * Calculate rotation direction based on sensor change.
  */
-inline RotDir calcDirection(byte oldVal, byte newVal)
+inline rotDirection calcDirection(byte oldVal, byte newVal)
 {
     // This table expresses the direction from two subsequent sensor readings. 1st sensor weight 1, 2nd sensor with weight 2
-    const static RotDir states[4][4] = 
+    const static rotDirection states[4][4] = 
         {/*0*/{ROT_DIR_NONE,     ROT_DIR_FORWARD,  ROT_DIR_BACKWARD, ROT_DIR_ERROR},
          /*1*/{ROT_DIR_BACKWARD, ROT_DIR_NONE,     ROT_DIR_ERROR,    ROT_DIR_FORWARD},
          /*2*/{ROT_DIR_FORWARD,  ROT_DIR_ERROR,    ROT_DIR_NONE,     ROT_DIR_BACKWARD},
