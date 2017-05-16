@@ -39,10 +39,14 @@ struct header
     byte reserved;
 };
 
+/* 
+ * Estimate transition time through exchange of timestamps.
+ */
 struct pingpong
 {
     struct header hdr;
-    uint32_t timestamp;  
+    uint32_t timestamp1;  // ping sender fill in this (pong sender copies)
+    uint32_t timestamp2;  // ping sets to 0 (pong sender fill this)
 };
 
 struct sequence
@@ -51,19 +55,23 @@ struct sequence
     byte sequence[4*MAX_NO_OF_SONAR];
 };
 
-struct distances
+struct distance
 {
     struct header hdr;
-    uint16_t distances[MAX_NO_OF_SONAR];
+    byte sensor;       // 0 .. MAX_NO_OF_SONAR-1
+    byte filler;       // Alignment
+    uint16_t distance; // Measurements in microseconds
+    uint32_t when;     // Time when data was measured
 };
 
 struct rot_one
 {
     word speed;        // Pulses per second (lowest possible speed is 20 seconds for one wheel revolution)
-    byte direction;    // enumeration rotDirection is used
+    byte direction;    // Enumeration rotDirection is used
     byte reserved;     // Filler for alignment
-    uint32_t dist;     // since direction change
-    uint32_t dist_abs; // absolute direction travelled
+    uint32_t when;     // Timestamp for measurement
+    uint32_t dist;     // Odometer when direction changed
+    uint32_t dist_abs; // Absolute distance travelled
 };
 
 struct rotation
@@ -77,7 +85,7 @@ union payload
 {
     struct pingpong pp;
     struct sequence sq;
-    struct distances ds;
+    struct distance ds;
     struct rotation rt;
 };
 
@@ -92,7 +100,7 @@ typedef union
     struct header hdr;
     struct pingpong pp;
     struct sequence sq;
-    struct distances ds;
+    struct distance ds;
     struct rotation rt;
 } packet;
 

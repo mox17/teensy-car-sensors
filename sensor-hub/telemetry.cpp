@@ -7,6 +7,16 @@
  * Input:
  * When byte 0x7D is received, discard this byte, and the next byte is XORed with 0x20.
  * 
+ * The telemetry code will do a best effort to send as much data as possible over the link.
+ * There may be more data produced than what can be sent. It is therefore split into a number of queues.
+ * 1) priorityQueue    These are messages that should NOT be dropped. For example ping/pong messages.
+ * 2) ultrasoundQueue  These are measurements of obstacle distances. These should be mixed fairly with odometerQueue.
+ * 3) odometerQueue    These are measurements of the wheel rotations. These should be mixed fairly with ultrasoundQueue.
+ * 
+ * When selecting what to send, first check priority queue. Then consider ultrasoundQueue and odometerQueue in alternating order.
+ * If data cannot be sent, then items in ultrasoundQueue and odometerQueue can be replaced with newer measurements.
+ *
+ *
  */
 #include "telemetry.h"
 #include <HardwareSerial.h>
