@@ -25,10 +25,6 @@
 
 #define serialPort Serial1
 
-#define START_STOP 0x7e
-#define DATA_ESCAPE 0x7d
-#define DATA_FRAME 0x10
-
 
 // Outgoing packet queues
 QueueList <packet *> priorityQueue;  // allow for 4
@@ -196,8 +192,8 @@ enum transmitStates {
 packet *currentTxPacket = NULL;       // The currently transmitting packet
 uint16_t totalTxSize;                 // Total number of bytes (payload - note escaped) in bufefr
 uint16_t currentTxOffset;             // Current offset for transmission
-transmitStates txState = TS_BEGIN;  // State for packet transmission
-byte escByte;                       // stuffed byte, i.e. value xor'ed with 0x20 to transmit.
+transmitStates txState = TS_BEGIN;    // State for packet transmission
+byte escByte;                         // stuffed byte, i.e. value xor'ed with 0x20 to transmit.
 uint16_t txCrc=0;
 
 /**
@@ -236,16 +232,16 @@ bool getPacketByte(byte &b)
     switch (txState)
     {
     case TS_BEGIN:
-        b = START_STOP;
+        b = FRAME_START_STOP;
         txState = TS_DATA;
         break;
 
     case TS_DATA:
         b = currentTxPacket->raw[currentTxOffset++];
-        if ((b == 0x7d)||(b == 0x7e))
+        if ((b == FRAME_DATA_ESCAPE)||(b == FRAME_START_STOP))
         {
-            escByte = b ^ 0x20;
-            b = 0x7d;
+            escByte = b ^ FRAME_XOR;
+            b = FRAME_DATA_ESCAPE;
         }
         else 
         {
@@ -267,12 +263,12 @@ bool getPacketByte(byte &b)
         if (endOfPacketHandling())
         {
             // A new packet is ready to go
-            b = START_STOP;  // This will serve as separator between packets
+            b = FRAME_START_STOP;  // This will serve as separator between packets
             txState = TS_DATA;
         }
         else
         {
-        b = START_STOP;  // Terminator for this packet
+        b = FRAME_START_STOP;  // Terminator for this packet
         txState = TS_IDLE;
         }
         break;
@@ -282,7 +278,7 @@ bool getPacketByte(byte &b)
         if (endOfPacketHandling())
         {
             // A new packet is ready to go
-            b = START_STOP;  // This will serve as separator between packets
+            b = FRAME_START_STOP;  // This will serve as separator between packets
             txState = TS_DATA;
         }
         else
@@ -344,7 +340,7 @@ void SerialSendCrc()
 
 void SerialSendPacket(uint16_t id, uint32_t value) 
 {
-    SerialSendByte(DATA_FRAME);
+    //SerialSendByte(DATA_FRAME);
     uint8_t *bytes = (uint8_t*)&id;
     SerialSendByte(bytes[0]);
     SerialSendByte(bytes[1]);

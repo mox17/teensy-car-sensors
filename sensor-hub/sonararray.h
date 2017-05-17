@@ -4,8 +4,7 @@
  */
 #pragma once
 #include "ESPing.h"
-
-#define MAX_NO_OF_SONAR 6
+#include "common.h"
 
 class SonarArray {
 
