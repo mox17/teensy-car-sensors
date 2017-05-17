@@ -3,6 +3,7 @@
  */
 #include "sonararray.h"
 #include "rotation.h"
+#include "telemetry.h"
 
 // Hall-effect pin configuration
 const int ledPin   = 13;  // Flash LED on hall-effect state change 
@@ -26,23 +27,21 @@ SonarArray *sa;
 
 unsigned loopTimer;
 
+// Setup serial to RPi
+Telemetry messageHandling(Serial1, 115200);
+
 void sonarSetup()
 {
     sa = new SonarArray(sonarCount, sonarPins, maxDistance, sonarReport);
 }
 
-
 void setup() 
 {
-    // Setup serial to RPi
-    Serial1.begin(115200);
-    Serial1.println("testing...");
-
     Serial.begin(115200);
     pinMode(ledPin, OUTPUT);
   
+    // Wheel sensor configuration
     Rotation(hallPinL1, hallPinL2, hallPinR1, hallPinR2);
-    Serial.println("Hello1");
     loopTimer = millis(); // Start now.
   
     sonarSetup();
@@ -51,7 +50,6 @@ void setup()
     // Control ultrasound sensor sequencing
     //int sequence[] = {2,1,1,0,0,0,1,1};
     //sa->setSequence(8, sequence);
-    Serial.println("Hello3");
 }
 
 int sonarTrack = 0;
@@ -81,6 +79,7 @@ void loop()
         //Serial.println("restart sonar");
         //sa->startSonar();
     }
+    messageHandling.serialPolling();
 }
 
 void rotationStatus()

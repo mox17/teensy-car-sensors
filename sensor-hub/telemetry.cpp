@@ -19,32 +19,35 @@
  *
  */
 #include "telemetry.h"
-#include <HardwareSerial.h>
-#include <QueueList.h>
-#include "sonararray.h"
 
-#define serialPort Serial1
-
-
-// Outgoing packet queues
-QueueList <packet *> priorityQueue;  // allow for 4
-QueueList <packet *> rotationQueue;  // allow for 2
-QueueList <packet *> sonarQueue[MAX_NO_OF_SONAR]; // allow for 6+2
-QueueList <packet *> freeList;
-
-// Static array of packet buffers to flow around the queues
-const unsigned bufferCount = 4+2+6+2;
-packet packetPool[bufferCount];
-
-unsigned sequenceIdx=0;
-const unsigned sequenceMax = MAX_NO_OF_SONAR+1;
-QueueList <packet *> * queueSequence[sequenceMax];  // This is used to cycle between queues
+Telemetry::Telemetry(HardwareSerial port, unsigned speed) :
+    rxCurrentPacket(NULL),
+    rxState(RS_BEGIN),
+    rxCurrentOffset(0),
+    rxChecksum(0),
+    rxErrorChecksum(0),
+    rxErrorTooShort(0),
+    rxErrorTooLong(0),
+    rxErrorBuffer(0),
+    rxErrorDropped(0),
+    txCurrentPacket(NULL),
+    txTotalSize(0),
+    txCurrentOffset(0),
+    txState(TS_BEGIN),
+    txChecksum(0),
+    sequenceIdx(0)
+{
+    serialPort = port;
+    initQueues();
+    serialPort.begin(speed);
+    serialPort.println("ctr...");
+}
 
 /**
  * \brief Initialize packet queues
  * Initialize free list
  */
-void initQueues()
+void Telemetry::initQueues()
 {
     for (unsigned i=0;i<bufferCount;i++)
     {
@@ -62,7 +65,7 @@ void initQueues()
 /**
  * \brief Get a packet from most appropriate queue
  */
-packet * getPacketFromQueues()
+packet * Telemetry::getPacketFromQueues()
 {
     // First check priority queue
     if (!priorityQueue.isEmpty())
@@ -80,7 +83,7 @@ packet * getPacketFromQueues()
     return NULL;
 }
 
-size_t getPacketLength(packet *p)
+size_t Telemetry::getPacketLength(packet *p)
 {
     switch (p->hdr.cmd) 
     {
@@ -107,7 +110,7 @@ size_t getPacketLength(packet *p)
     return 0;
 }
 
-void setPing(packet &packet, uint32_t val)
+void Telemetry::setPing(packet &packet, uint32_t val)
 {
     packet.pp.hdr.dst = ADDR_RPI;
     packet.pp.hdr.src = ADDR_TEENSY;
@@ -117,37 +120,40 @@ void setPing(packet &packet, uint32_t val)
     packet.pp.timestamp2 = 0;
 }
 
-void serialPolling()
+void Telemetry::serialPolling()
 {
-    if (serialPort.available() > 0)
+    // first handle incoming data
+    while (serialPort.available() > 0) 
     {
-        
+        rxHandleUartByte(serialPort.read());
+    }
+    // Then transmit data
+    while (serialPort.availableForWrite() > 0)
+    {
+        byte b;
+        if (txGetPacketByte(b))
+        {
+            serialPort.write(b);
+        }
     }
 }
 
-inline void crcUpdate(byte b);
+void Telemetry::rxInitPacket()
+{
+    if (rxCurrentPacket)
+    {
+        rxCurrentOffset = 0;
+        rxState = RS_BEGIN;
+        rxChecksum = 0;
+    }
+}
 
-enum receiveStates {
-    RS_BEGIN,  // Waiting for framing 0x7e
-    RS_DATA,   // Incoming data
-    RS_ESCAPE, // Received 0x7d - xor next byte with 0x20
-};
-
-packet *currentRxPacket = NULL;
-receiveStates rxState = RS_BEGIN;
-uint16_t currentRxOffset = 0;
-uint16_t rxCrc=0;
-uint32_t rxErrorCount=0;  // Number of packets with checksum errors
-uint32_t rxErrorBuffer=0; // No receive buffer available
-
-bool getRxBuffer()
+bool Telemetry::rxGetBuffer()
 {
     if (freeList.count())
     {
-        currentRxPacket = freeList.pop();
-        currentRxOffset = 0;
-        rxState = RS_BEGIN;
-        rxCrc=0;
+        rxCurrentPacket = freeList.pop();
+        rxInitPacket();
         return true;
     }
     else
@@ -157,11 +163,68 @@ bool getRxBuffer()
     }
 }
 
-void handleRxByte(byte b)
+void Telemetry::rxSaveByte(byte b)
 {
-    if (currentRxPacket == NULL)
+    if ((rxCurrentOffset <= MAX_MSG_SIZE) && (rxCurrentPacket != NULL))
     {
-        if (!getRxBuffer())
+        rxCurrentPacket->raw[rxCurrentOffset++] = b;
+    } else {
+        rxErrorTooLong++;
+        rxInitPacket();
+    }
+}
+
+/**
+ * @brief Calculate checksum for incoming data.
+ *
+ * The incoming checksum is calculated when the FRAME_START_STOP byte is received.
+ * The final checksum, with the checksum included, shall be 0xff 
+ */
+void Telemetry::rxCalcChecksum(byte b)
+{
+    crcUpdate(rxChecksum, b);
+}
+
+/*
+ * @brief Validation and processing of received packet
+ * 
+ * The indicated length is 1 longer than actual payload because of checksum byte.
+ */
+bool Telemetry::rxEndOfPacketHandling()
+{
+    if ((rxChecksum != 0xff))
+    {
+        rxErrorChecksum++;
+        rxInitPacket();
+        return false;
+    }
+    if (rxCurrentOffset <= sizeof(header))
+    {
+        rxErrorTooShort++;
+        rxInitPacket();
+        return false;
+    }
+    if (rxCurrentOffset > (MAX_MSG_SIZE+1))
+    {
+        rxErrorTooLong++;
+        rxInitPacket();
+        return false;
+    }
+    // Packet has passed validation tests and can now be acted on.
+
+    return true;
+}
+
+/**
+ * @brief Handle incoming bytes from UART. 
+ * 
+ * This function is called from polling loop.
+ */
+void Telemetry::rxHandleUartByte(byte b)
+{
+    if (rxCurrentPacket == NULL)
+    {
+        if (!rxGetBuffer())
         {
             return;
         }
@@ -170,63 +233,72 @@ void handleRxByte(byte b)
     {
     case RS_BEGIN:
         // Waiting for 0x7e to arrive
+        if (b == FRAME_START_STOP)
+        {
+            rxInitPacket();
+            rxCalcChecksum(b);
+            rxState = RS_DATA;
+        } else {
+            rxErrorDropped++;
+        }
         break;
 
     case RS_DATA:
+        if (b == FRAME_DATA_ESCAPE)
+        {
+            rxCalcChecksum(b);
+            rxState = RS_ESCAPE;
+        } else if (b == FRAME_START_STOP)
+        {
+            txEndOfPacketHandling();
+        } else {
+            rxCalcChecksum(b);
+            rxSaveByte(b);        
+        }
         break;
     
     case RS_ESCAPE:
+        rxCalcChecksum(b);
+        rxSaveByte(b ^ FRAME_XOR);
+        rxState = RS_DATA;
         break;
     }
 }
 
-enum transmitStates {
-    TS_BEGIN,  // Nothing sent yet, deliver 0x7e
-    TS_DATA,   // Sending normal data
-    TS_ESCAPE, // Escape has been sent, escByte is next
-    TS_CHKSUM, // Last data byte sent, checksum is next
-    TS_END,    // Checksum sent, frame is next. Can be skipped if there is a next packet in queue
-    TS_IDLE,   // No data to transmit.
-};
-
-packet *currentTxPacket = NULL;       // The currently transmitting packet
-uint16_t totalTxSize;                 // Total number of bytes (payload - note escaped) in bufefr
-uint16_t currentTxOffset;             // Current offset for transmission
-transmitStates txState = TS_BEGIN;    // State for packet transmission
-byte escByte;                         // stuffed byte, i.e. value xor'ed with 0x20 to transmit.
-uint16_t txCrc=0;
-
 /**
- * \brief Handle the last by of the packet.
+ * @brief Handling triggered by the last byte of an outgoing packet.
+ *
  * Put transmitted packet buffer back on the free list.
  * If there is another packet ready return true, otherwise false.
  * If there is no new packet, then end frame marker and serial flush is wanted.
  */
-bool endOfPacketHandling()
+bool Telemetry::txEndOfPacketHandling()
 {
     packet *p;
 
-    if (currentTxPacket != NULL)
+    if (txCurrentPacket != NULL)
     {
-        freeList.push(currentTxPacket);
-        currentTxPacket = NULL;
+        freeList.push(txCurrentPacket);
+        txCurrentPacket = NULL;
     }
     p = getPacketFromQueues();
     if (p != NULL)
     {
-        currentTxPacket = p;
-        currentTxOffset = 0;
-        totalTxSize = getPacketLength(p);
-        txCrc = 0;
+        txCurrentPacket = p;
+        txCurrentOffset = 0;
+        txTotalSize = getPacketLength(p);
+        txChecksum = 0;
         return true;
     }
     return false;
 }
 
-/*
+/**
+ * @brief Calculate bytes for TX side
+ *
  * Pull bytes one-by-one from buffer with framing, stuffing and checksum calculation
  */
-bool getPacketByte(byte &b)
+bool Telemetry::txGetPacketByte(byte &b)
 {
     bool ret = true;
     switch (txState)
@@ -237,118 +309,57 @@ bool getPacketByte(byte &b)
         break;
 
     case TS_DATA:
-        b = currentTxPacket->raw[currentTxOffset++];
+        b = txCurrentPacket->raw[txCurrentOffset++];
         if ((b == FRAME_DATA_ESCAPE)||(b == FRAME_START_STOP))
         {
-            escByte = b ^ FRAME_XOR;
+            txEscByte = b ^ FRAME_XOR;
             b = FRAME_DATA_ESCAPE;
-        }
-        else 
-        {
-            txState = (currentTxOffset < totalTxSize) ? TS_DATA : TS_CHKSUM;
+        } else {
+            txState = (txCurrentOffset < txTotalSize) ? TS_DATA : TS_CHKSUM;
         }
         break;
 
     case TS_ESCAPE:
-        b = escByte;
-        txState = (currentTxOffset < totalTxSize) ? TS_DATA : TS_CHKSUM;
+        b = txEscByte;
+        txState = (txCurrentOffset < txTotalSize) ? TS_DATA : TS_CHKSUM;
         break;
 
     case TS_CHKSUM:
-        b = txCrc;
+        b = 0xFF-txChecksum;  // Finalize checksum to total 0xFF
         txState = TS_END;
         break;
 
     case TS_END:
-        if (endOfPacketHandling())
+        b = FRAME_START_STOP;  // This will serve as separator between packets
+        if (txEndOfPacketHandling())
         {
-            // A new packet is ready to go
-            b = FRAME_START_STOP;  // This will serve as separator between packets
+            // A new packet is ready to go, separate delivered here
             txState = TS_DATA;
-        }
-        else
-        {
-        b = FRAME_START_STOP;  // Terminator for this packet
-        txState = TS_IDLE;
+        } else {
+            txState = TS_IDLE;
         }
         break;
 
     case TS_IDLE:
         // While waiting for data, check the queues
-        if (endOfPacketHandling())
+        if (txEndOfPacketHandling())
         {
             // A new packet is ready to go
             b = FRAME_START_STOP;  // This will serve as separator between packets
             txState = TS_DATA;
-        }
-        else
-        {
+        } else {
             return false;
         }
     }
-    crcUpdate(b);
+    // Checksum is calculated over all bytes sent from FRAME_START_STOP up to
+    // but not including the checksum byte preceeding the closing FRAME_START_STOP
+    crcUpdate(txChecksum, b);
     return ret;
 }
 
-void serviceSerial()
+inline void Telemetry::crcUpdate(uint16_t &chksum, byte b)
 {
-    int txRoom = Serial1.availableForWrite();
-    int rxRoom = Serial1.available();
-    
-    while (txRoom > 0) 
-    {
-        
-    }
-}
-
-
-
-void SerialTransmitByte(uint8_t b) 
-{
-    if ( b == 0x7e ) {
-        serialPort.write( 0x7d );
-        serialPort.write( 0x5e );
-    } else if ( b == 0x7d ) {
-        serialPort.write( 0x7d );
-        serialPort.write( 0x5d );
-    } else {
-        serialPort.write( b );
-    } 
-}
-
-void SerialSendByte(uint8_t b) 
-{
-    SerialTransmitByte( b );
-    // CRC update
-    txCrc += b; //0-1FF
-    txCrc += ( txCrc >> 8 ); //0-100
-    txCrc &= 0x00ff;
-}
-
-inline void crcUpdate(byte b)
-{
-    txCrc += b; //0-1FF
-    txCrc += ( txCrc >> 8 ); //0-100
-    txCrc &= 0x00ff;
-}
-
-void SerialSendCrc() 
-{
-    SerialTransmitByte( 0xFF-txCrc );
-    txCrc = 0; // CRC reset
-}
-
-void SerialSendPacket(uint16_t id, uint32_t value) 
-{
-    //SerialSendByte(DATA_FRAME);
-    uint8_t *bytes = (uint8_t*)&id;
-    SerialSendByte(bytes[0]);
-    SerialSendByte(bytes[1]);
-    bytes = (uint8_t*)&value;
-    SerialSendByte(bytes[0]);
-    SerialSendByte(bytes[1]);
-    SerialSendByte(bytes[2]);
-    SerialSendByte(bytes[3]);
-    SerialSendCrc();
-    serialPort.flush();
+    chksum += b; //0-1FF
+    chksum += (txChecksum >> 8); //0-100
+    chksum &= 0x00ff;
 }

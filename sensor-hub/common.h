@@ -142,9 +142,9 @@ const size_t MAX_MSG_SIZE = sizeof(payload);
  */
 typedef union 
 {
-    byte raw[MAX_MSG_SIZE]; // Raw bytes (for UART RX and RX)
-    struct header hdr;      // Minimal header for decoding
-    struct pingpong pp;     // message specific layouts...
+    byte raw[MAX_MSG_SIZE+1]; // Raw bytes (for UART RX and RX). Allow 1 byte extra for checksum
+    struct header hdr;        // Minimal header for decoding
+    struct pingpong pp;       // message specific layouts...
     struct sequence sq;
     struct distance ds;
     struct rotation rt;
