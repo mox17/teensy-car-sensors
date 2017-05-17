@@ -1,9 +1,11 @@
-/* 
- *  Hall-effect sensors and ultrasound sensors
+/**
+ * @brief Hall-effect and ultrasound sensors processing
  */
 #include "sonararray.h"
 #include "rotation.h"
 #include "telemetry.h"
+
+void sonarReport(int id, int value, unsigned long time_in_ms);
 
 // Hall-effect pin configuration
 const int ledPin   = 13;  // Flash LED on hall-effect state change 
@@ -20,20 +22,22 @@ const int ultraSound3TrigPin = 12;
 const int sonarPins[] = {ultraSound1TrigPin, ultraSound2TrigPin, ultraSound3TrigPin};
 const int sonarCount = 3;//sizeof(sonarPins)/sizeof(sonarPins[0]);
 
-unsigned int sonarResults[6] = {0};// Raw timing data in microseconds
-unsigned int sonarCounts[6] = {0}; // Number of reports
+volatile unsigned int sonarResults[MAX_NO_OF_SONAR] = {0};// Raw timing data in microseconds
+volatile unsigned int sonarCounts[MAX_NO_OF_SONAR] = {0}; // Number of reports
+volatile unsigned long sonarTiming[MAX_NO_OF_SONAR] = {0}; // Timestamp;
 volatile int sonarUpdate = 0;      // sonar event counter - updated from interrupt context
-SonarArray *sa;
+int sonarTrack = 0;                // Compare with sonarUpdate to determine updates
+SonarArray sa(sonarCount, sonarPins, maxDistance, sonarReport);
 
 unsigned loopTimer;
 
 // Setup serial to RPi
 Telemetry messageHandling(Serial1, 115200);
 
-void sonarSetup()
-{
-    sa = new SonarArray(sonarCount, sonarPins, maxDistance, sonarReport);
-}
+unsigned rotationUpdate=0;  // When was last time a wheel update was done
+
+RotCalc rotLeft = RotCalc(ROT_LEFT);
+RotCalc rotRight = RotCalc(ROT_RIGHT);
 
 void setup() 
 {
@@ -44,19 +48,11 @@ void setup()
     Rotation(hallPinL1, hallPinL2, hallPinR1, hallPinR2);
     loopTimer = millis(); // Start now.
   
-    sonarSetup();
-
-    sa->startSonar();
+    sa.startSonar();
     // Control ultrasound sensor sequencing
     //int sequence[] = {2,1,1,0,0,0,1,1};
-    //sa->setSequence(8, sequence);
+    //sa.setSequence(8, sequence);
 }
-
-int sonarTrack = 0;
-unsigned rotationUpdate=0;
-
-RotCalc rotLeft = RotCalc(ROT_LEFT);
-RotCalc rotRight = RotCalc(ROT_RIGHT);
 
 void loop()
 {
@@ -64,6 +60,13 @@ void loop()
 
     rotLeft.calculate();
     rotRight.calculate();
+    if (rotLeft.newData() || rotRight.newData())
+    {
+        rot_one l,r;
+        rotLeft.rotGetRec(l);
+        rotRight.rotGetRec(r);
+        messageHandling.wheelEvent(l,r);
+    }
   
     // Display when new data is available
     if (rotLeft.newData() || rotRight.newData() || sonar) {
@@ -72,13 +75,7 @@ void loop()
         sonarTrack = sonarUpdate;
         Serial.println("");
     }
-  
-    // This is needed to restart the measuring sequence if a sensor fails to return a result.
-    if ((millis() - rotationUpdate) > 100)
-    {
-        //Serial.println("restart sonar");
-        //sa->startSonar();
-    }
+    // Drive the RX/TX messaging queues towards RPi
     messageHandling.serialPolling();
 }
 
@@ -108,6 +105,7 @@ void sonarReport(int id, int value, unsigned long time_in_ms)
 {
     Serial1.print(char(48+id));
     sonarResults[id] = value;
+    sonarTiming[id] = time_in_ms;
     sonarCounts[id]++;
     sonarUpdate++;
 }

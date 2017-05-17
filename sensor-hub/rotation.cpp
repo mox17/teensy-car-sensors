@@ -179,8 +179,9 @@ m_odometer(0)
     m_window = new rotEvent[avgCount];
 }
 
-/*
- * Process data put in ringbuffers by ISRs.
+/**
+ * @brief Process data put in ringbuffers by ISRs.
+ *
  * Keep up to avgCount-1 samples available.
  * Clear history when direction changes.
   */
@@ -201,6 +202,7 @@ bool RotCalc::calculate()
             m_wTail = 0;
             m_wHead = avgCount-1;
             m_wCount = 0;
+            m_odoDirChg = m_odometer;
             Serial.print("\n----");
             Serial.print(m_direction);
             Serial.print(" - ");
@@ -257,17 +259,16 @@ bool RotCalc::calculate()
     return newData;
 }
 
-float RotCalc::pulsePerSec()
+uint16_t RotCalc::pulsePerSec()
 {
-    calculate();
     if (m_deltaPulse && m_deltaMillis)
     {
         //Serial.print(m_deltaPulse); Serial.print(" "); Serial.println(m_deltaMillis);
-        return (1000.0 * (float)m_deltaPulse / (float)m_deltaMillis);
+        return (1000 * m_deltaPulse / m_deltaMillis);
     }
     else
     {
-        return 0.0;
+        return 0;
     }
 }
 
@@ -289,6 +290,21 @@ bool RotCalc::newData()
     return ret;
 }
 
+void RotCalc::rotGetRec(rot_one &rec)
+{
+    rec.speed = pulsePerSec();
+    rec.direction = m_direction;
+    rec.reserved = 0;
+    rec.when = m_latest;
+    rec.dist = m_odoDirChg;
+    rec.dist_abs = m_odometer;
+}
+
+void RotCalc::resetOdometer()
+{
+    m_odoDirChg = 0;
+    m_odometer = 0;
+}
 /*
  * Calculate rotation direction based on sensor change.
  */
@@ -356,4 +372,3 @@ void hallChangeR2()
     rotCountR++;
     rotAddRingBufR(millis(), rotCountR, forwardR);
 }
-

@@ -29,14 +29,16 @@ public:
 	RotCalc(rotSide side);
 	bool pulse(uint32_t time, bool direction);
 	bool calculate();
-	float pulsePerSec();
+	uint16_t pulsePerSec();
 	uint32_t odometer();
 	rotDirection direction();
 	bool newData();
+    void rotGetRec(rot_one &rec);
+    void resetOdometer();
 
 private:
-    uint32_t avgSiz;
-    rotEvent* m_window;
+    uint32_t avgSiz;    // Averaging window size for speed calculation
+    rotEvent* m_window; // Buffer for averaging samples
     byte m_wHead;
     byte m_wTail;
     byte m_wCount;
@@ -47,5 +49,5 @@ private:
     uint32_t m_deltaPulse;
     uint32_t m_deltaMillis;
     uint32_t m_odometer;
-
+    uint32_t m_odoDirChg; // odometer at direction change
 };
