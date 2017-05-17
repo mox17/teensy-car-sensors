@@ -44,7 +44,131 @@ Telemetry::Telemetry(HardwareSerial port, unsigned speed) :
 }
 
 /**
- * \brief Initialize packet queues
+ * @brief Print error counter to selected serial port.
+ */
+void Telemetry::printErrorCounters(HardwareSerial out) const
+{
+    out.print( "rxErrorChecksum :");
+    out.println(rxErrorChecksum);
+    out.print( "rxErrorTooShort :");
+    out.println(rxErrorTooShort);
+    out.print( "rxErrorTooLong  :");
+    out.println(rxErrorTooLong);
+    out.print( "rxErrorBuffer   :");
+    out.println(rxErrorBuffer);
+    out.print( "rxErrorDropped  :");
+    out.println(rxErrorDropped);
+    out.print( "rxErrorUnknown  :");
+    out.println(rxErrorUnknown);
+    out.print( "txErrorNoBuf    :");
+    out.println(txErrorNoBuf);
+    out.print( "txInfoSonarDrop :");
+    out.println(txInfoSonarDrop);
+    out.print( "txInfoWheelDrop :");
+    out.println(txInfoWheelDrop);
+}
+
+/**
+ * @brief Send wheel event to RPi.
+ * 
+ * Replace any pending event already in queue.
+ */
+void Telemetry::wheelEvent(rot_one left, rot_one right)
+{
+    packet *p;
+
+    if (rotationQueue.isEmpty())
+    {
+        if (!freeList.isEmpty())
+        {
+            p = freeList.pop();
+        } else {
+            txErrorNoBuf++;
+            return;
+        }
+    } else {
+        // An earlier buffer was not sent yet, so it is updated.
+        txInfoWheelDrop++;
+        p = rotationQueue.pop();
+    }
+    // At this point we have a tx buffer and the rotationQueue should be empty (or shorter)
+    p->rt.hdr.dst = ADDR_RPI;
+    p->rt.hdr.src = ADDR_TEENSY;
+    p->rt.hdr.cmd = CMD_ROT_STATUS;
+    p->rt.hdr.reserved = 0;
+    p->rt.rot[ROT_LEFT] = left;
+    p->rt.rot[ROT_RIGHT] = right;
+    rotationQueue.push(p);
+}
+
+/**
+ * @brief Send a sonar event to RPi.
+ * 
+ * Replace any pending sonar event in queue for this sensor.
+ */
+void Telemetry::sonarEvent(byte sensor, uint16_t distance, uint32_t when)
+{
+    packet *p;
+
+    if (sensor >= MAX_NO_OF_SONAR)
+    {
+        return;
+    }
+    if (sonarQueue[sensor].isEmpty())
+    {
+        if (!freeList.isEmpty())
+        {
+            p = freeList.pop();
+        } else {
+            txErrorNoBuf++;
+            return;
+        }
+    } else {
+        // An earlier buffer was not sent yet, so it is updated.
+        txInfoSonarDrop++;
+        p = sonarQueue[sensor].pop();
+    }
+    // At this point we have a tx buffer. Fill in and enqueue.
+    p->ds.hdr.dst = ADDR_RPI;
+    p->ds.hdr.src = ADDR_TEENSY;
+    p->ds.hdr.cmd = CMD_US_STATUS;
+    p->ds.hdr.reserved = 0;
+    p->ds.sensor = sensor;
+    p->ds.filler = 0;
+    p->ds.distance = distance;
+    p->ds.when = when;
+    sonarQueue[sensor].push(p);
+}
+
+/**
+ * @brief Send a ping message to Raspberry Pi side and prepare for result.
+ */
+void Telemetry::sendPing(bool &ready, uint32_t &delay)
+{
+    packet *p;
+
+    if (!freeList.isEmpty())
+    {
+        p = freeList.pop();
+    } else {
+        txErrorNoBuf++;
+        return;
+    }
+    p->pp.hdr.dst = ADDR_RPI;
+    p->pp.hdr.src = ADDR_TEENSY;
+    p->pp.hdr.cmd = CMD_PING;
+    p->pp.hdr.reserved = 0;
+    p->pp.timestamp1 = millis();
+    p->pp.timestamp2 = 0;
+    pingReady = &ready;
+    *pingReady = false;
+    pingDelay = &delay;
+    *pingDelay = 0;
+    priorityQueue.push(p);
+}
+
+/**
+ * @brief Initialize packet queues
  * Initialize free list
  */
 void Telemetry::initQueues()
@@ -63,7 +187,10 @@ void Telemetry::initQueues()
 }
 
 /**
- * \brief Get a packet from most appropriate queue
+ * @brief Get a packet from most appropriate queue
+ *
+ * This is the prioritized packet scheduler for optimizing the bandwidth to RPi.
+ * It is a round-robin scheme for non-prioritized messages.
  */
 packet * Telemetry::getPacketFromQueues()
 {
@@ -76,13 +203,18 @@ packet * Telemetry::getPacketFromQueues()
     {
         if (queueSequence[sequenceIdx]->count())
         {
+            packet *p = queueSequence[sequenceIdx]->pop();
+            // Next place to look...
             sequenceIdx = ((sequenceIdx+1)%sequenceMax);
-            return queueSequence[sequenceIdx]->pop();
+            return p;
         }
     }
     return NULL;
 }
 
+/**
+ * @brief Calculate packet length from command (opcode)
+ */
 size_t Telemetry::getPacketLength(packet *p)
 {
     switch (p->hdr.cmd) 
@@ -108,16 +240,6 @@ size_t Telemetry::getPacketLength(packet *p)
         return sizeof(header);
     }
     return 0;
-}
-
-void Telemetry::setPing(packet &packet, uint32_t val)
-{
-    packet.pp.hdr.dst = ADDR_RPI;
-    packet.pp.hdr.src = ADDR_TEENSY;
-    packet.pp.hdr.cmd = CMD_PING;
-    packet.pp.hdr.reserved = 0;
-    packet.pp.timestamp1 = val;
-    packet.pp.timestamp2 = 0;
 }
 
 void Telemetry::serialPolling()
@@ -195,7 +317,7 @@ bool Telemetry::rxEndOfPacketHandling()
     if ((rxChecksum != 0xff))
     {
         rxErrorChecksum++;
-        rxInitPacket();
+        rxInitPacket(); // recycle current rx buffer in place
         return false;
     }
     if (rxCurrentOffset <= sizeof(header))
@@ -210,9 +332,68 @@ bool Telemetry::rxEndOfPacketHandling()
         rxInitPacket();
         return false;
     }
-    // Packet has passed validation tests and can now be acted on.
+    // Packet has passed basic validation tests and can now be acted on.
+    packet *p = rxCurrentPacket;
+    rxCurrentPacket = NULL;
+    // Basic sanity check of incoming packet
+    if (p->hdr.dst == ADDR_TEENSY)
+    {
+        switch (p->hdr.cmd)
+        {
+        case CMD_PING:
+            // Reply with a CMD_PONG
+            p->pp.hdr.dst = p->pp.hdr.src;
+            p->pp.hdr.src = ADDR_TEENSY;
+            p->pp.hdr.cmd = CMD_PONG;
+            p->pp.timestamp2 = millis();
+            priorityQueue.push(p);
+            p = NULL;
+            break;
 
+        case CMD_PONG:
+            // Response to an earlier ping (we hope)
+            if ((pingReady != NULL) && (pingDelay != NULL))
+            {
+                *pingDelay = millis() - p->pp.timestamp1;
+                *pingReady = true;
+            }
+            break;
+
+        case CMD_US_SET_SEQ:
+            // TODO: set sonar sequence
+            break;
+
+        case CMD_US_STOP:
+            // TODO: stop sonar
+            break;
+
+        case CMD_US_START:
+            // TODO: start sonar (again)
+            break;
+
+        case CMD_ROT_RESET:
+            // TODO: reset odometer
+            break;
+
+        default:
+            rxErrorUnknown++;
+            break;
+        }
+        if (p != NULL)
+        {
+            freeList.push(p);
+        }
+    } else {
+        // Packet was not for this processor
+        rxPacketForwarding(p);
+    }
     return true;
+}
+
+void Telemetry::rxPacketForwarding(packet *p)
+{
+    // There is no forwarding at this point, so free buffer.
+    freeList.push(p);
 }
 
 /**
@@ -250,7 +431,7 @@ void Telemetry::rxHandleUartByte(byte b)
             rxState = RS_ESCAPE;
         } else if (b == FRAME_START_STOP)
         {
-            txEndOfPacketHandling();
+            rxEndOfPacketHandling();
         } else {
             rxCalcChecksum(b);
             rxSaveByte(b);        

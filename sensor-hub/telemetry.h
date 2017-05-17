@@ -10,6 +10,10 @@ class Telemetry
 public:
     Telemetry(HardwareSerial port, unsigned speed);
     void serialPolling();
+    void printErrorCounters(HardwareSerial out) const;
+    void wheelEvent(rot_one left, rot_one right);
+    void sonarEvent(byte sensor, uint16_t distance, uint32_t when);
+    void sendPing(bool &ready, uint32_t &delay);
 
 private:
     enum receiveStates {
@@ -45,6 +49,10 @@ private:
     uint32_t rxErrorTooLong;  // Number of packets exceeding max length.
     uint32_t rxErrorBuffer;   // No receive buffer available
     uint32_t rxErrorDropped;  // Number of bytes thrown away while looking for sync
+    uint32_t rxErrorUnknown;  // Unknown command
+    uint32_t txErrorNoBuf;    // No free tx buffers
+    uint32_t txInfoSonarDrop;
+    uint32_t txInfoWheelDrop;
 
     // TX data housekeeping
     packet *txCurrentPacket;  // The currently transmitting packet
@@ -54,6 +62,9 @@ private:
     byte txEscByte;           // stuffed byte, i.e. value xor'ed with 0x20 to transmit.
     uint16_t txChecksum;      // TX checksum
 
+    // Protocol housekeeping
+    bool *pingReady;
+    uint32_t *pingDelay;
 
     // Static array of packet buffers to flow around the queues
     static const unsigned bufferCount = 4+2+6+2;
@@ -68,7 +79,6 @@ private:
     void initQueues();
     packet *getPacketFromQueues();
     size_t getPacketLength(packet *p);
-    void setPing(packet &packet, uint32_t val);
     inline void crcUpdate(uint16_t &chksum, byte b);
     bool rxGetBuffer();
     void rxHandleUartByte(byte b);
@@ -76,6 +86,7 @@ private:
     bool rxEndOfPacketHandling();
     void rxInitPacket();
     void rxSaveByte(byte b);
+    void rxPacketForwarding(packet *p);
     bool txEndOfPacketHandling();
     bool txGetPacketByte(byte &b);
 };
