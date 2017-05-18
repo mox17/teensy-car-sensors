@@ -6,6 +6,12 @@
 #pragma once
 #include "common.h"
 
+// Each wheel has two hall-effect sensors
+enum sensorNo {
+    ROT_SENSOR_ONE,
+    ROT_SENSOR_TWO
+};
+
 void Rotation(uint8_t left1,  uint8_t left2, 
 	            uint8_t right1, uint8_t right2);
 
@@ -25,7 +31,7 @@ uint32_t rotCheckOverflow();
 class RotCalc
 {
 public:
-	const unsigned avgCount = 20; // 5 magnets and 2 sensors give 20 pulses per wheel revolution, even out alignment differences
+	const static unsigned avgCount = 20; // 5 magnets and 2 sensors give 20 pulses per wheel revolution, even out alignment differences
 	RotCalc(rotSide side);
 	bool pulse(uint32_t time, bool direction);
 	bool calculate();
@@ -37,8 +43,7 @@ public:
     void resetOdometer();
 
 private:
-    uint32_t avgSiz;    // Averaging window size for speed calculation
-    rotEvent* m_window; // Buffer for averaging samples
+    rotEvent m_window[avgCount]; // Buffer for averaging samples
     byte m_wHead;
     byte m_wTail;
     byte m_wCount;
