@@ -48,12 +48,12 @@ void Rotation(uint8_t left1, uint8_t left2, uint8_t right1, uint8_t right2)
     }
 }
 
-#define BUFSIZE 50
+const size_t BUFSIZE = 50;
 volatile byte headL=0;  // Circular ISR buffer indices LEFT
 volatile byte tailL=0;
 volatile byte headR=0;  // Circular ISR buffer indices RIGHT
 volatile byte tailR=0;
-volatile uint32_t overflow=false;
+volatile uint32_t overflowCount=0;
 volatile uint32_t rotCountL=0;
 volatile uint32_t rotCountR=0;
 // Because of the limited RAM on Teensy LC this rotation data is split to avoid alignment waste.
@@ -66,6 +66,34 @@ volatile rotDirection   bufDirectionR[BUFSIZE];
 
 volatile byte rStateL=0;
 volatile byte rStateR=0;
+
+class wheelCircularBuffer
+{
+
+public:
+    wheelCircularBuffer(int pin1, int pin2) :
+        m_head(BUFSIZE-1),
+        m_tail(0),
+        m_overflowCount(0),
+        m_rotCount(0)
+    {
+        m_pin1 = pin1;
+        m_pin2 = pin2;
+    }
+
+void isrHelper()
+{
+
+}
+    
+private:
+    volatile byte m_head;
+    volatile byte m_tail;
+    volatile uint32_t m_overflowCount;
+    volatile uint32_t m_rotCount;
+    int m_pin1;
+    int m_pin2;
+};
 
 /*
  * This function is called from interrupt context
@@ -89,8 +117,8 @@ bool rotAddRingBufL(uint32_t time, uint32_t count, rotDirection dir)
     }
     else 
     {
-        Serial1.print('!');
-        overflow = true;
+        //Serial1.print('!');
+        overflowCount++;
         return false;
     }
 }
@@ -117,7 +145,7 @@ bool rotAddRingBufR(uint32_t time, uint32_t count, rotDirection dir)
     }
     else 
     {
-        overflow = true;
+        overflowCount++;
         return false;
     }
 }
@@ -162,19 +190,19 @@ bool rotGetEventR(struct rotEvent &event)
 
 uint32_t rotCheckOverflow()
 {
-    uint32_t ret = overflow;
-    overflow = 0;
+    uint32_t ret = overflowCount;
+    overflowCount = 0;
     return ret;
 }
 
 RotCalc::RotCalc(rotSide side) :
-m_wHead(avgCount-1),
-m_wTail(0),
-m_wCount(0),
-m_newData(false),
-m_deltaPulse(0),
-m_deltaMillis(0),
-m_odometer(0)
+    m_wHead(avgCount-1),
+    m_wTail(0),
+    m_wCount(0),
+    m_newData(false),
+    m_deltaPulse(0),
+    m_deltaMillis(0),
+    m_odometer(0)
 {
     m_window = new rotEvent[avgCount];
 }
