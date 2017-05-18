@@ -3,69 +3,11 @@
 #include <avr/interrupt.h>
 #include "rotation.h"
 
-// Input pin numbers
-uint8_t hallPinL1=-1;
-uint8_t hallPinL2=-1;
-uint8_t hallPinR1=-1;
-uint8_t hallPinR2=-1;
-
-// Are there input pins given for both sides.
-bool leftSupported=false;
-bool rightSupported=false;
-
-volatile rotDirection forwardL;
-volatile rotDirection forwardR;
-
-void hallChangeL1();
-void hallChangeL2();
-void hallChangeR1();
-void hallChangeR2();
-
-void Rotation(uint8_t left1, uint8_t left2, uint8_t right1, uint8_t right2)
-{
-    hallPinL1 = left1;
-    hallPinL2 = left2;
-    hallPinR1 = right1;
-    hallPinR2 = right2;
-
-    if ((hallPinL1 >= 0) && (hallPinL2 >= 0))
-    {
-        leftSupported = true;
-        pinMode(hallPinL1, INPUT_PULLUP);
-        pinMode(hallPinL2, INPUT_PULLUP);
-        attachInterrupt(digitalPinToInterrupt(hallPinL1), hallChangeL1, CHANGE);
-        attachInterrupt(digitalPinToInterrupt(hallPinL2), hallChangeL2, CHANGE);
-    }
-
-    if ((hallPinR1 >= 0) && (hallPinR2 >= 0))
-    {
-        rightSupported = true;
-        pinMode(hallPinR1, INPUT_PULLUP);
-        pinMode(hallPinR2, INPUT_PULLUP);
-        attachInterrupt(digitalPinToInterrupt(hallPinR1), hallChangeR1, CHANGE);
-        attachInterrupt(digitalPinToInterrupt(hallPinR2), hallChangeR2, CHANGE);
-    }
-}
-
 const size_t BUFSIZE = 50;
 
-volatile byte headL=0;  // Circular ISR buffer indices LEFT
-volatile byte tailL=0;
-volatile byte headR=0;  // Circular ISR buffer indices RIGHT
-volatile byte tailR=0;
-volatile uint32_t overflowCount=0;
-volatile uint32_t rotCountL=0;
-volatile uint32_t rotCountR=0;
-// Because of the limited RAM on Teensy LC this rotation data is split to avoid alignment waste.
-volatile uint32_t bufWhenL[BUFSIZE];
-volatile uint32_t bufCountL[BUFSIZE];
-volatile rotDirection   bufDirectionL[BUFSIZE];
-volatile uint32_t bufWhenR[BUFSIZE];
-volatile uint32_t bufCountR[BUFSIZE];
-volatile rotDirection   bufDirectionR[BUFSIZE];
-
-volatile byte rStateL=0;
-volatile byte rStateR=0;
+class WheelSensor;
+WheelSensor *leftWheel=NULL;
+WheelSensor *rightWheel=NULL;
 
 /**
  * @brief Calculate rotation direction based on sensor change.
@@ -172,14 +114,13 @@ public:
  * }
  *
  */
-    WheelSensor(int pin1, int pin2, WheelSensor* &global, void (*isr1)(void), void (*isr2)(void)) :
+    WheelSensor(int pin1, int pin2, void (*isr1)(void), void (*isr2)(void)) :
         m_pinsState(0),
         m_rotCount(0),
         m_direction(ROT_DIR_NONE)
     {
         m_inputPins[ROT_SENSOR_ONE] = pin1;
         m_inputPins[ROT_SENSOR_TWO] = pin2;
-        global = this;
         pinMode(pin1, INPUT_PULLUP);
         pinMode(pin2, INPUT_PULLUP);
         attachInterrupt(digitalPinToInterrupt(pin1), isr1, CHANGE);
@@ -202,6 +143,11 @@ public:
         m_buf.push(millis(), m_rotCount, m_direction);
     }
 
+    bool getEvent(rotEvent &event)
+    {
+        return m_buf.pop(event);
+    }
+
 private:
     byte m_inputPins[2];
     byte m_pinsState;
@@ -209,106 +155,6 @@ private:
     volatile rotDirection m_direction;
     CircularBuffer m_buf;
 };
-
-/*
- * This function is called from interrupt context
- */
-bool rotAddRingBufL(uint32_t time, uint32_t count, rotDirection dir)
-{
-    uint8_t t;
-
-    t = tailL + 1;
-    if (t >= BUFSIZE)
-    {
-        t = 0;
-    }
-    if (t != headL) 
-    {                // if the buffer isn't full
-        tailL = t;
-        bufWhenL[t] = time;
-        bufCountL[t] = count;
-        bufDirectionL[t] = dir;            // put new data into buffer
-        return true;
-    }
-    else 
-    {
-        //Serial1.print('!');
-        overflowCount++;
-        return false;
-    }
-}
-
-/*
- * This function is called from interrupt context
- */
-bool rotAddRingBufR(uint32_t time, uint32_t count, rotDirection dir)
-{
-    uint8_t t;
-
-    t = tailR + 1;
-    if (t >= BUFSIZE)
-    {
-        t = 0;
-    }
-    if (t != headR) 
-    {                // if the buffer isn't full
-        tailR = t;
-        bufWhenR[t] = time;
-        bufCountR[t] = count;
-        bufDirectionR[t] = dir;            // put new data into buffer
-        return true;
-    }
-    else 
-    {
-        overflowCount++;
-        return false;
-    }
-}
-
-bool rotGetEventL(struct rotEvent &event)
-{
-    uint8_t h;
-    if (headL==tailL) 
-    {
-        return false;
-    }
-    h = headL;
-    if (++h >= BUFSIZE)
-    {
-        h = 0;
-    }
-    event.when = bufWhenL[h];          // remove 1 sample from buffer
-    event.count = bufCountL[h];
-    event.direction = bufDirectionL[h];
-    headL = h;
-    return true;
-}
-
-bool rotGetEventR(struct rotEvent &event)
-{
-    uint8_t h;
-    if (headR==tailR) 
-    {
-        return false;
-    }
-    h = headR;
-    if (++h >= BUFSIZE)
-    {
-        h = 0;
-    }
-    event.when = bufWhenR[h];         // remove 1 sample from buffer
-    event.count = bufCountR[h];
-    event.direction = bufDirectionR[h];
-    headR = h;
-    return true;
-}
-
-uint32_t rotCheckOverflow()
-{
-    uint32_t ret = overflowCount;
-    overflowCount = 0;
-    return ret;
-}
 
 RotCalc::RotCalc(rotSide side) :
     m_wHead(avgCount-1),
@@ -336,7 +182,7 @@ bool RotCalc::calculate()
     byte oldest;
 
     m_latest = millis();
-    while ((dataAvailable = ((m_side == ROT_LEFT) ? rotGetEventL(rec) : rotGetEventR(rec))))
+    while ((dataAvailable = ((m_side == ROT_LEFT) ? leftWheel->getEvent(rec) : rightWheel->getEvent(rec))))
     {
         if (m_direction != rec.direction)
         {
@@ -448,56 +294,50 @@ void RotCalc::resetOdometer()
     m_odometer = 0;
 }
 
-// ISR 
-void hallChangeL1() 
+void isrLeftOne()
 {
-    byte old = rStateL;
-    bool pinStatus;
-
-    pinStatus = digitalRead(hallPinL1);
-    rotCountL++;
-    rStateL = pinStatus ? (rStateL | 0x1) : (rStateL & 0x2);
-    //Serial1.print(char(48+rStateL));
-    forwardL = calcDirection(old, rStateL);
-    rotAddRingBufL(millis(), rotCountL, forwardL);
+    if (leftWheel)
+    {
+        leftWheel->isrHelper(ROT_SENSOR_ONE);
+    }
 }
 
-// ISR 
-void hallChangeL2() 
+void isrLeftTwo()
 {
-    byte old = rStateL;
-    bool pinStatus;
-
-    pinStatus = digitalRead(hallPinL2);
-    rStateL = pinStatus ? (rStateL | 0x2) : (rStateL & 0x1);
-    //Serial1.print(char(48+rStateL));
-    forwardL = calcDirection(old, rStateL);
-    rotCountL++;
-    rotAddRingBufL(millis(), rotCountL, forwardL);
+    if (leftWheel)
+    {
+        leftWheel->isrHelper(ROT_SENSOR_TWO);
+    }
 }
 
-// ISR 
-void hallChangeR1() 
+void isrRightOne()
 {
-    byte old = rStateR;
-    bool pinStatus;
-
-    pinStatus = digitalRead(hallPinR1);
-    rStateR = pinStatus ? (rStateR | 0x1) : (rStateR & 0x2);
-    forwardR = calcDirection(old, rStateR);
-    rotCountR++;
-    rotAddRingBufR(millis(), rotCountR, forwardR);
+    if (rightWheel)
+    {
+        rightWheel->isrHelper(ROT_SENSOR_ONE);
+    }
 }
 
-// ISR 
-void hallChangeR2() 
+void isrRightTwo()
 {
-    byte old = rStateR;
-    bool pinStatus;
+    if (rightWheel)
+    {
+        rightWheel->isrHelper(ROT_SENSOR_TWO);
+    }
+}
 
-    pinStatus = digitalRead(hallPinR2);
-    rStateR = pinStatus ? (rStateR | 0x2) : (rStateR & 0x1);
-    forwardR = calcDirection(old, rStateR);
-    rotCountR++;
-    rotAddRingBufR(millis(), rotCountR, forwardR);
+/**
+ * @brief Set up main roration sensor objects.
+ */
+void Rotation(uint8_t left1, uint8_t left2, uint8_t right1, uint8_t right2)
+{
+    if ((left1 >= 0) && (left2 >= 0))
+    {
+        leftWheel = new WheelSensor(left1, left2, &isrLeftOne, &isrLeftTwo);
+    }
+
+    if ((right1 >= 0) && (right2 >= 0))
+    {
+        rightWheel = new WheelSensor(right1, right2, &isrRightOne, &isrRightTwo);
+    }
 }

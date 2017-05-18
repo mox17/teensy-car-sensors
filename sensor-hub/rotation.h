@@ -22,12 +22,6 @@ struct rotEvent
     rotDirection direction;
 };
 
-// Extract event from buffer
-bool rotGetEventL(struct rotEvent &event);
-bool rotGetEventR(struct rotEvent &event);
-
-uint32_t rotCheckOverflow();
-
 class RotCalc
 {
 public:
