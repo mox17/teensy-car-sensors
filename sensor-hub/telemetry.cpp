@@ -583,3 +583,11 @@ packet* Telemetry::getEmptyPacket()
     }
     return NULL;
 }
+
+void Telemetry::putMainLoopPacket(packet *p)
+{
+    if (p != NULL)
+    {
+        mainLoop.push(p);
+    }
+}

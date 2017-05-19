@@ -71,7 +71,8 @@ void loop()
     }
   
     // Display when new data is available
-    if (rotLeft.newData() || rotRight.newData() || newSonarData) {
+    if (rotLeft.newData() || rotRight.newData() || newSonarData) 
+    {
         rotationStatus();
         sonarStatus();
         sonarTrack = sonarUpdate;
@@ -82,6 +83,12 @@ void loop()
     handleMessageQueue();
 }
 
+/**
+ * @brief Handling of messages sent to main loop.
+ *
+ * These messages can originate from RPi, or they can originate from 
+ * interrupt handling.
+ */
 void handleMessageQueue()
 {
     byte id;
@@ -170,5 +177,6 @@ void sonarReport(int id, int value, unsigned long time_in_ms)
         p->ds.sensor = id;
         p->ds.distance = value;
         p->ds.when = time_in_ms;
+        messageHandling.putMainLoopPacket(p);
     }
 }

@@ -17,6 +17,7 @@ public:
     packet *getMainLoopPacket();
     void freePacket(packet *p);
     packet *getEmptyPacket();
+    void putMainLoopPacket(packet *p);
 
 private:
     enum receiveStates {
