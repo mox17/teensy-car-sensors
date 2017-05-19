@@ -92,7 +92,7 @@ private:
     void rxHandleUartByte(byte b);
     void rxCalcChecksum(byte b);
     bool rxEndOfPacketHandling();
-    void rxInitPacket();
+    void rxReInitPacket();
     void rxSaveByte(byte b);
     void rxPacketForwarding(packet *p);
     bool txEndOfPacketHandling();

@@ -30,12 +30,10 @@ int sonarTrack = 0;                // Compare with sonarUpdate to determine upda
 SonarArray sonarArray(sonarCount, sonarPins, maxDistance, sonarReport);
 
 unsigned loopTimer;
+unsigned rotationUpdate=0;  // When was last time a wheel update was done
 
 // Setup serial to RPi
 Telemetry messageHandling(Serial1, 115200);
-
-unsigned rotationUpdate=0;  // When was last time a wheel update was done
-
 RotCalc rotLeft = RotCalc(ROT_LEFT);
 RotCalc rotRight = RotCalc(ROT_RIGHT);
 
@@ -96,7 +94,7 @@ void handleMessageQueue()
     packet *p = messageHandling.getMainLoopPacket();
     if (p != NULL)
     {
-        switch (p->hdr.cmd)
+        switch ((command)p->hdr.cmd)
         {
         case CMD_PONG:
             Serial.print("PONG received, delay=");
@@ -104,7 +102,12 @@ void handleMessageQueue()
             break;
 
         case CMD_US_SET_SEQ:
-            sonarArray.setSequence(p->sq.len, p->sq.sequence);
+            if (p->sq.len <= 4*MAX_NO_OF_SONAR)
+            {
+                sonarArray.setSequence(p->sq.len, p->sq.sequence);
+            } else {
+                // TODO malformed command error counter
+            }
             break;
 
         case CMD_US_STOP:
@@ -117,13 +120,18 @@ void handleMessageQueue()
 
         case CMD_US_STATUS:
             id = p->ds.sensor;
-            sonarResults[id] = p->ds.distance;
-            sonarTiming[id] = p->ds.when;
-            sonarCounts[id]++;
-            sonarUpdate++;
-            // Put message on TX queue
-            messageHandling.sonarEvent(p);
-            p = NULL;
+            if (id < MAX_NO_OF_SONAR)
+            {
+                sonarResults[id] = p->ds.distance;
+                sonarTiming[id] = p->ds.when;
+                sonarCounts[id]++;
+                sonarUpdate++;
+                // Put message on TX queue
+                messageHandling.sonarEvent(p);
+                p = NULL;
+            } else {
+                // TODO malformed command error counter
+            }
             break;
 
         case CMD_ROT_RESET:
@@ -134,6 +142,7 @@ void handleMessageQueue()
         default:
             Serial.print("Unknown CMD ");
             Serial.println(p->hdr.cmd);
+            // TODO malformed command error counter
             break;
         }
         if (p != NULL)

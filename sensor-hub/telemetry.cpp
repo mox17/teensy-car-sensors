@@ -200,7 +200,7 @@ packet * Telemetry::txGetPacketFromQueues()
  */
 size_t Telemetry::getPacketLength(packet *p)
 {
-    switch (p->hdr.cmd) 
+    switch ((command)p->hdr.cmd) 
     {
     case CMD_PING:  
     case CMD_PONG:
@@ -243,7 +243,7 @@ void Telemetry::serialPolling()
     }
 }
 
-void Telemetry::rxInitPacket()
+void Telemetry::rxReInitPacket()
 {
     if (rxCurrentPacket)
     {
@@ -263,11 +263,9 @@ bool Telemetry::rxGetBuffer()
     if (freeList.count())
     {
         rxCurrentPacket = freeList.pop();
-        rxInitPacket();
+        rxReInitPacket();
         return true;
-    }
-    else
-    {
+    } else {
         rxErrorBuffer++;
         return false;
     }
@@ -280,7 +278,7 @@ void Telemetry::rxSaveByte(byte b)
         rxCurrentPacket->raw[rxCurrentOffset++] = b;
     } else {
         rxErrorTooLong++;
-        rxInitPacket();
+        rxReInitPacket();
     }
 }
 
@@ -302,22 +300,23 @@ void Telemetry::rxCalcChecksum(byte b)
  */
 bool Telemetry::rxEndOfPacketHandling()
 {
+    // Check basic packet validity
     if ((rxChecksum != 0xff))
     {
         rxErrorChecksum++;
-        rxInitPacket(); // recycle current rx buffer in place
+        rxReInitPacket(); // recycle current rx buffer in place
         return false;
     }
     if (rxCurrentOffset <= sizeof(header))
     {
         rxErrorTooShort++;
-        rxInitPacket();
+        rxReInitPacket();
         return false;
     }
     if (rxCurrentOffset > (MAX_MSG_SIZE+1))
     {
         rxErrorTooLong++;
-        rxInitPacket();
+        rxReInitPacket();
         return false;
     }
     // Packet has passed basic validation tests and can now be acted on.
@@ -326,7 +325,7 @@ bool Telemetry::rxEndOfPacketHandling()
     // Basic sanity check of incoming packet
     if (p->hdr.dst == ADDR_TEENSY)
     {
-        switch (p->hdr.cmd)
+        switch ((command)p->hdr.cmd)
         {
         case CMD_PING:
             // Reply with a CMD_PONG
@@ -410,7 +409,7 @@ void Telemetry::rxHandleUartByte(byte b)
         // Waiting for 0x7e to arrive
         if (b == FRAME_START_STOP)
         {
-            rxInitPacket();
+            rxReInitPacket();
             rxCalcChecksum(b);
             rxState = RS_DATA;
         } else {
