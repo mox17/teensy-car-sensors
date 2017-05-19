@@ -306,6 +306,9 @@ bool RotCalc::newData()
     return ret;
 }
 
+/**
+ * @brief Get rotation record.
+ */
 void RotCalc::rotGetRec(rot_one &rec)
 {
     rec.speed = pulsePerSec();
@@ -345,7 +348,7 @@ void isrRightTwo()
 }
 
 /**
- * @brief Set up main roration sensor objects.
+ * @brief Set up main rotation sensor objects.
  */
 void Rotation(uint8_t left1, uint8_t left2, uint8_t right1, uint8_t right2)
 {
