@@ -27,7 +27,7 @@ volatile unsigned int sonarCounts[MAX_NO_OF_SONAR] = {0}; // Number of reports
 volatile unsigned long sonarTiming[MAX_NO_OF_SONAR] = {0}; // Timestamp;
 volatile int sonarUpdate = 0;      // sonar event counter - updated from interrupt context
 int sonarTrack = 0;                // Compare with sonarUpdate to determine updates
-SonarArray sa(sonarCount, sonarPins, maxDistance, sonarReport);
+SonarArray sonarArray(sonarCount, sonarPins, maxDistance, sonarReport);
 
 unsigned loopTimer;
 
@@ -48,28 +48,30 @@ void setup()
     Rotation(hallPinL1, hallPinL2, hallPinR1, hallPinR2);
     loopTimer = millis(); // Start now.
   
-    sa.startSonar();
+    sonarArray.startSonar();
     // Control ultrasound sensor sequencing
     //int sequence[] = {2,1,1,0,0,0,1,1};
-    //sa.setSequence(8, sequence);
+    //sonarArray.setSequence(8, sequence);
 }
 
 void loop()
 {
-    bool sonar = (sonarTrack != sonarUpdate);
+    bool newSonarData = (sonarTrack != sonarUpdate);
 
-    rotLeft.calculate();
-    rotRight.calculate();
+    rotLeft.handleBuffer();
+    rotRight.handleBuffer();
     if (rotLeft.newData() || rotRight.newData())
     {
-        rot_one l,r;
+        // When there is new data put a message on the queue for 
+        // transmission to RPi
+        rot_one l, r;
         rotLeft.rotGetRec(l);
         rotRight.rotGetRec(r);
-        messageHandling.wheelEvent(l,r);
+        messageHandling.wheelEvent(l, r);
     }
   
     // Display when new data is available
-    if (rotLeft.newData() || rotRight.newData() || sonar) {
+    if (rotLeft.newData() || rotRight.newData() || newSonarData) {
         rotationStatus();
         sonarStatus();
         sonarTrack = sonarUpdate;
@@ -77,6 +79,61 @@ void loop()
     }
     // Drive the RX/TX messaging queues towards RPi
     messageHandling.serialPolling();
+    handleMessageQueue();
+}
+
+void handleMessageQueue()
+{
+    byte id;
+
+    packet *p = messageHandling.getMainLoopPacket();
+    if (p != NULL)
+    {
+        switch (p->hdr.cmd)
+        {
+        case CMD_PONG:
+            Serial.print("PONG received, delay=");
+            Serial.println(millis() - p->pp.timestamp1);
+            break;
+
+        case CMD_US_SET_SEQ:
+            sonarArray.setSequence(p->sq.len, p->sq.sequence);
+            break;
+
+        case CMD_US_STOP:
+            sonarArray.stopSonar();
+            break;
+
+        case CMD_US_START:
+            sonarArray.startSonar();
+            break;
+
+        case CMD_US_STATUS:
+            id = p->ds.sensor;
+            sonarResults[id] = p->ds.distance;
+            sonarTiming[id] = p->ds.when;
+            sonarCounts[id]++;
+            sonarUpdate++;
+            // Put message on TX queue
+            messageHandling.sonarEvent(p);
+            p = NULL;
+            break;
+
+        case CMD_ROT_RESET:
+            rotLeft.resetOdometer();
+            rotRight.resetOdometer();
+            break;
+
+        default:
+            Serial.print("Unknown CMD ");
+            Serial.println(p->hdr.cmd);
+            break;
+        }
+        if (p != NULL)
+        {
+            messageHandling.freePacket(p);
+        }
+    }
 }
 
 void rotationStatus()
@@ -103,9 +160,15 @@ void sonarStatus()
 // Callback from sonar timer handler - be quick!
 void sonarReport(int id, int value, unsigned long time_in_ms)
 {
-    Serial1.print(char(48+id));
-    sonarResults[id] = value;
-    sonarTiming[id] = time_in_ms;
-    sonarCounts[id]++;
-    sonarUpdate++;
+    packet *p = messageHandling.getEmptyPacket();
+    if (p)
+    {
+        p->ds.hdr.dst = ADDR_TEENSY;
+        p->ds.hdr.src = ADDR_TEENSY;
+        p->ds.hdr.cmd = CMD_US_STATUS;
+        p->ds.hdr.reserved = 0;
+        p->ds.sensor = id;
+        p->ds.distance = value;
+        p->ds.when = time_in_ms;
+    }
 }

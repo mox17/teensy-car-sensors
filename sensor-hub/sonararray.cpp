@@ -65,7 +65,7 @@ void SonarArray::stopSonar()
     m_state = SONAR_STOPPED;
 }
 
-void SonarArray::setSequence(int length, int seq[])
+void SonarArray::setSequence(byte length, byte seq[])
 {
     m_seqLen = min(length,4*MAX_PINS);
     for (int i=0; i<m_seqLen; i++) 

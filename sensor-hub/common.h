@@ -72,11 +72,11 @@ const unsigned MAX_NO_OF_SONAR = 6;
 /**
  * Define polling sequence of sonars. 
  * Same sonar id can be repeated up to 4 times.
- * Fill unused positions with 0xff.
  */
 struct sequence
 {
     struct header hdr;
+    byte len;  // Valid bytes in sequence array
     byte sequence[4*MAX_NO_OF_SONAR];
 };
 

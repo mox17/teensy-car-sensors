@@ -106,38 +106,21 @@ void Telemetry::wheelEvent(rot_one left, rot_one right)
  * 
  * Replace any pending sonar event in queue for this sensor.
  */
-void Telemetry::sonarEvent(byte sensor, uint16_t distance, uint32_t when)
+void Telemetry::sonarEvent(packet *sonarPacket)
 {
-    packet *p;
+    byte sensor = sonarPacket->ds.sensor;
 
-    if (sensor >= MAX_NO_OF_SONAR)
+    if (!sonarQueue[sensor].isEmpty())
     {
-        return;
-    }
-    if (sonarQueue[sensor].isEmpty())
-    {
-        if (!freeList.isEmpty())
-        {
-            p = freeList.pop();
-        } else {
-            txErrorNoBuf++;
-            return;
-        }
-    } else {
+        packet *p;
         // An earlier buffer was not sent yet, so it is updated.
         txInfoSonarDrop++;
         p = sonarQueue[sensor].pop();
+        freeList.push(p);
     }
-    // At this point we have a tx buffer. Fill in and enqueue.
-    p->ds.hdr.dst = ADDR_RPI;
-    p->ds.hdr.src = ADDR_TEENSY;
-    p->ds.hdr.cmd = CMD_US_STATUS;
-    p->ds.hdr.reserved = 0;
-    p->ds.sensor = sensor;
-    p->ds.filler = 0;
-    p->ds.distance = distance;
-    p->ds.when = when;
-    sonarQueue[sensor].push(p);
+    sonarPacket->ds.hdr.dst = ADDR_RPI;
+    sonarPacket->ds.hdr.src = ADDR_TEENSY;
+    sonarQueue[sensor].push(sonarPacket);
 }
 
 /**
@@ -192,7 +175,7 @@ void Telemetry::initQueues()
  * This is the prioritized packet scheduler for optimizing the bandwidth to RPi.
  * It is a round-robin scheme for non-prioritized messages.
  */
-packet * Telemetry::getPacketFromQueues()
+packet * Telemetry::txGetPacketFromQueues()
 {
     // First check priority queue
     if (!priorityQueue.isEmpty())
@@ -362,22 +345,28 @@ bool Telemetry::rxEndOfPacketHandling()
                 *pingDelay = millis() - p->pp.timestamp1;
                 *pingReady = true;
             }
+            mainLoop.push(p);
+            p = NULL;
             break;
 
         case CMD_US_SET_SEQ:
-            // TODO: set sonar sequence
+            mainLoop.push(p);
+            p = NULL;
             break;
 
         case CMD_US_STOP:
-            // TODO: stop sonar
+            mainLoop.push(p);
+            p = NULL;
             break;
 
         case CMD_US_START:
-            // TODO: start sonar (again)
+            mainLoop.push(p);
+            p = NULL;
             break;
 
         case CMD_ROT_RESET:
-            // TODO: reset odometer
+            mainLoop.push(p);
+            p = NULL;
             break;
 
         default:
@@ -467,7 +456,7 @@ bool Telemetry::txEndOfPacketHandling()
         freeList.push(txCurrentPacket);
         txCurrentPacket = NULL;
     }
-    p = getPacketFromQueues();
+    p = txGetPacketFromQueues();
     if (p != NULL)
     {
         txCurrentPacket = p;
@@ -565,4 +554,32 @@ inline void Telemetry::crcUpdate(uint16_t &chksum, byte b)
     chksum += b; //0-1FF
     chksum += (txChecksum >> 8); //0-100
     chksum &= 0x00ff;
+}
+
+packet* Telemetry::getMainLoopPacket()
+{
+    if (!mainLoop.isEmpty())
+    {
+        return mainLoop.pop();
+    }
+    return NULL;
+}
+
+void Telemetry::freePacket(packet *p)
+{
+    if (p != NULL)
+    {
+        freeList.push(p);
+    }
+}
+
+packet* Telemetry::getEmptyPacket()
+{
+    if (!freeList.isEmpty())
+    {
+        return freeList.pop();
+    } else {
+        txErrorNoBuf++;
+    }
+    return NULL;
 }

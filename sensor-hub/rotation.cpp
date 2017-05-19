@@ -3,11 +3,7 @@
 #include <avr/interrupt.h>
 #include "rotation.h"
 
-const size_t BUFSIZE = 50;
-
-class WheelSensor;
-WheelSensor *leftWheel=NULL;
-WheelSensor *rightWheel=NULL;
+const size_t BUFSIZE = 32;
 
 /**
  * @brief Calculate rotation direction based on sensor change.
@@ -33,6 +29,15 @@ public:
         m_tail(0),
         m_overflowCount(0)
     {
+    }
+
+    void resetBuffer()
+    {
+        noInterrupts();
+        m_head = 0;
+        m_tail = 0;
+        m_overflowCount = 0;
+        interrupts();
     }
 
     bool push(uint32_t time, uint32_t count, rotDirection dir)
@@ -93,31 +98,40 @@ private:
 class WheelSensor
 {
 public:
-/**
- * @brief Constructor for wheel sensors - for one wheel
- *
- * Since this code is called from interrupt context,
- * the object pointer must be available as a global variable.
- *
- * The global pointer to object is known in main ISR.
- * Each WheelSensor instance will need two ISR handlers written
- * like this:
- *
- * void isrOne()
- * {
- *     global->isrHelper(ROT_SENSOR_ONE);
- * }
- *
- * void isrTwo()
- * {
- *     global->isrHelper(ROT_SENSOR_TWO);
- * }
- *
- */
-    WheelSensor(int pin1, int pin2, void (*isr1)(void), void (*isr2)(void)) :
+    /**
+     * @brief Wheel sensor interrupt handling
+     *
+     * Since this code uses interrupts, 
+     * the object pointer must be available as a global variable.
+     *
+     * Each WheelSensor instance will need two ISR handlers written
+     * like this:
+     *
+     * void isrOne()
+     * {
+     *     global->isrHelper(ROT_SENSOR_ONE);
+     * }
+     *
+     * void isrTwo()
+     * {
+     *     global->isrHelper(ROT_SENSOR_TWO);
+     * }
+     *
+     */
+    WheelSensor() :
         m_pinsState(0),
         m_rotCount(0),
         m_direction(ROT_DIR_NONE)
+    {
+    }
+
+    /**
+     * @brief Set up HW is separate method. 
+     * 
+     * This allows static allocation of WheelSensor object, while still
+     * controlling when interrupts starts flowing in.
+     */
+    void activate(int pin1, int pin2, void (*isr1)(void), void (*isr2)(void))
     {
         m_inputPins[ROT_SENSOR_ONE] = pin1;
         m_inputPins[ROT_SENSOR_TWO] = pin2;
@@ -126,7 +140,6 @@ public:
         attachInterrupt(digitalPinToInterrupt(pin1), isr1, CHANGE);
         attachInterrupt(digitalPinToInterrupt(pin2), isr2, CHANGE);
     }
-
     /**
      * @brief This function is called from ISR handler. 
      */
@@ -148,6 +161,12 @@ public:
         return m_buf.pop(event);
     }
 
+    void resetCounter()
+    {
+        m_rotCount = 0;
+        m_buf.resetBuffer();
+    }
+
 private:
     byte m_inputPins[2];
     byte m_pinsState;
@@ -156,6 +175,15 @@ private:
     CircularBuffer m_buf;
 };
 
+WheelSensor leftWheel;
+WheelSensor rightWheel;
+
+/*
+ * @brief Rotation calculation class
+ *
+ * This class encapsulated the collection of data from interrupt driven buffers 
+ * and calculation (averaging) of speed over a number of samples.
+ */
 RotCalc::RotCalc(rotSide side) :
     m_wHead(avgCount-1),
     m_wTail(0),
@@ -172,8 +200,8 @@ RotCalc::RotCalc(rotSide side) :
  *
  * Keep up to avgCount-1 samples available.
  * Clear history when direction changes.
-  */
-bool RotCalc::calculate()
+ */
+bool RotCalc::handleBuffer()
 {
     bool dataAvailable;
     struct rotEvent rec;
@@ -182,7 +210,7 @@ bool RotCalc::calculate()
     byte oldest;
 
     m_latest = millis();
-    while ((dataAvailable = ((m_side == ROT_LEFT) ? leftWheel->getEvent(rec) : rightWheel->getEvent(rec))))
+    while ((dataAvailable = ((m_side == ROT_LEFT) ? leftWheel.getEvent(rec) : rightWheel.getEvent(rec))))
     {
         if (m_direction != rec.direction)
         {
@@ -262,7 +290,7 @@ uint16_t RotCalc::pulsePerSec()
 
 uint32_t RotCalc::odometer()
 {
-    calculate();
+    handleBuffer();
     return m_odometer;
 }
 
@@ -292,38 +320,28 @@ void RotCalc::resetOdometer()
 {
     m_odoDirChg = 0;
     m_odometer = 0;
+    leftWheel.resetCounter();
+    rightWheel.resetCounter();
 }
 
 void isrLeftOne()
 {
-    if (leftWheel)
-    {
-        leftWheel->isrHelper(ROT_SENSOR_ONE);
-    }
+    leftWheel.isrHelper(ROT_SENSOR_ONE);
 }
 
 void isrLeftTwo()
 {
-    if (leftWheel)
-    {
-        leftWheel->isrHelper(ROT_SENSOR_TWO);
-    }
+    leftWheel.isrHelper(ROT_SENSOR_TWO);
 }
 
 void isrRightOne()
 {
-    if (rightWheel)
-    {
-        rightWheel->isrHelper(ROT_SENSOR_ONE);
-    }
+    rightWheel.isrHelper(ROT_SENSOR_ONE);
 }
 
 void isrRightTwo()
 {
-    if (rightWheel)
-    {
-        rightWheel->isrHelper(ROT_SENSOR_TWO);
-    }
+    rightWheel.isrHelper(ROT_SENSOR_TWO);
 }
 
 /**
@@ -333,11 +351,11 @@ void Rotation(uint8_t left1, uint8_t left2, uint8_t right1, uint8_t right2)
 {
     if ((left1 >= 0) && (left2 >= 0))
     {
-        leftWheel = new WheelSensor(left1, left2, &isrLeftOne, &isrLeftTwo);
+        leftWheel.activate(left1, left2, &isrLeftOne, &isrLeftTwo);
     }
 
     if ((right1 >= 0) && (right2 >= 0))
     {
-        rightWheel = new WheelSensor(right1, right2, &isrRightOne, &isrRightTwo);
+        rightWheel.activate(right1, right2, &isrRightOne, &isrRightTwo);
     }
 }

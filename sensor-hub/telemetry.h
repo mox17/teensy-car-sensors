@@ -12,8 +12,11 @@ public:
     void serialPolling();
     void printErrorCounters(HardwareSerial out) const;
     void wheelEvent(rot_one left, rot_one right);
-    void sonarEvent(byte sensor, uint16_t distance, uint32_t when);
+    void sonarEvent(packet *sonarPacket);
     void sendPing(bool &ready, uint32_t &delay);
+    packet *getMainLoopPacket();
+    void freePacket(packet *p);
+    packet *getEmptyPacket();
 
 private:
     enum receiveStates {
@@ -37,7 +40,10 @@ private:
     QueueList <packet *> priorityQueue;  // allow for 4
     QueueList <packet *> rotationQueue;  // allow for 2
     QueueList <packet *> sonarQueue[MAX_NO_OF_SONAR]; // allow for 6+2
+    // Free buffers
     QueueList <packet *> freeList;
+    // Internal processing queue
+    QueueList <packet *> mainLoop;
 
     // RX data housekeeping
     packet *rxCurrentPacket;  // Packet being received
@@ -78,7 +84,7 @@ private:
 
     // Functions
     void initQueues();
-    packet *getPacketFromQueues();
+    packet *txGetPacketFromQueues();
     size_t getPacketLength(packet *p);
     inline void crcUpdate(uint16_t &chksum, byte b);
     bool rxGetBuffer();

@@ -28,7 +28,7 @@ public:
 	const static unsigned avgCount = 20; // 5 magnets and 2 sensors give 20 pulses per wheel revolution, even out alignment differences
 	RotCalc(rotSide side);
 	bool pulse(uint32_t time, bool direction);
-	bool calculate();
+	bool handleBuffer();
 	uint16_t pulsePerSec();
 	uint32_t odometer();
 	rotDirection direction();

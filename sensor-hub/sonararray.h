@@ -18,7 +18,7 @@ public:
     void startSonar();
     void stopSonar();
     bool sonarRunning();
-    void setSequence(int length, int seq[]);
+    void setSequence(byte length, byte seq[]);
     void nextSonar();
     
     static NewPing* m_currentSensor;
