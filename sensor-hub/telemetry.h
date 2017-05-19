@@ -27,6 +27,7 @@ private:
         TS_DATA,   // Sending normal data
         TS_ESCAPE, // Escape has been sent, escByte is next
         TS_CHKSUM, // Last data byte sent, checksum is next
+        TS_CHECKSUM_ESC, // checksum needs escaping
         TS_END,    // Checksum sent, frame is next. Can be skipped if there is a next packet in queue
         TS_IDLE,   // No data to transmit.
     };

@@ -270,6 +270,11 @@ void Telemetry::rxInitPacket()
     }
 }
 
+/**
+ * @brief Make a buffer ready for receiving serial data.
+ *
+ * In case of error a counter in increased.
+ */
 bool Telemetry::rxGetBuffer()
 {
     if (freeList.count())
@@ -477,7 +482,12 @@ bool Telemetry::txEndOfPacketHandling()
 /**
  * @brief Calculate bytes for TX side
  *
- * Pull bytes one-by-one from buffer with framing, stuffing and checksum calculation
+ * Pull bytes one-by-one from buffer with framing, stuffing and checksum calculation.
+ * This function drives the whole tx side, from pulling messages from queues to
+ * sending packetized records to RPi.
+ * 
+ * @return true if a byte is available for transmission.
+ * @param b the variable where byte is returned.
  */
 bool Telemetry::txGetPacketByte(byte &b)
 {
@@ -507,6 +517,18 @@ bool Telemetry::txGetPacketByte(byte &b)
 
     case TS_CHKSUM:
         b = 0xFF-txChecksum;  // Finalize checksum to total 0xFF
+        if ((b == FRAME_DATA_ESCAPE)||(b == FRAME_START_STOP))
+        {
+            txEscByte = b ^ FRAME_XOR;
+            b = FRAME_DATA_ESCAPE;
+            txState = TS_CHECKSUM_ESC;
+        } else {
+            txState = TS_END;
+        }
+        break;
+    
+    case TS_CHECKSUM_ESC:
+        b = txEscByte;
         txState = TS_END;
         break;
 
@@ -514,7 +536,7 @@ bool Telemetry::txGetPacketByte(byte &b)
         b = FRAME_START_STOP;  // This will serve as separator between packets
         if (txEndOfPacketHandling())
         {
-            // A new packet is ready to go, separate delivered here
+            // A new packet is ready to go, the framing byte is already delivered here
             txState = TS_DATA;
         } else {
             txState = TS_IDLE;
