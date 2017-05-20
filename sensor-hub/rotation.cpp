@@ -10,9 +10,9 @@ const size_t BUFSIZE = 32;
  */
 inline rotDirection calcDirection(byte oldVal, byte newVal)
 {
-    // This table expresses the rotation direction from two subsequent sensor readings. 
+    // This table expresses the rotation direction from two subsequent sensor readings.
     // Sensor redings combined into a two-bit number. 1st sensor weight 1, 2nd sensor with weight 2
-    const static rotDirection states[4][4] = 
+    const static rotDirection states[4][4] =
                /*0*/             /*1*/             /*2*/             /*3*/
         {/*0*/{ROT_DIR_NONE,     ROT_DIR_FORWARD,  ROT_DIR_BACKWARD, ROT_DIR_ERROR},
          /*1*/{ROT_DIR_BACKWARD, ROT_DIR_NONE,     ROT_DIR_ERROR,    ROT_DIR_FORWARD},
@@ -49,7 +49,7 @@ public:
         {
             t = 0;
         }
-        if (t != m_head) 
+        if (t != m_head)
         {
             m_tail = t;
             m_buffer[t].when = time;
@@ -57,7 +57,7 @@ public:
             m_buffer[t].direction = dir;
             return true;
         }
-        else 
+        else
         {
             m_overflowCount++;
             return false;
@@ -67,7 +67,7 @@ public:
     bool pop(struct rotEvent &event)
     {
         uint8_t h;
-        if (m_head == m_tail) 
+        if (m_head == m_tail)
         {
             return false;
         }
@@ -101,7 +101,7 @@ public:
     /**
      * @brief Wheel sensor interrupt handling
      *
-     * Since this code uses interrupts, 
+     * Since this code uses interrupts,
      * the object pointer must be available as a global variable.
      *
      * Each WheelSensor instance will need two ISR handlers written
@@ -126,8 +126,8 @@ public:
     }
 
     /**
-     * @brief Set up HW is separate method. 
-     * 
+     * @brief Set up HW is separate method.
+     *
      * This allows static allocation of WheelSensor object, while still
      * controlling when interrupts starts flowing in.
      */
@@ -141,18 +141,22 @@ public:
         attachInterrupt(digitalPinToInterrupt(pin2), isr2, CHANGE);
     }
     /**
-     * @brief This function is called from ISR handler. 
+     * @brief This function is called from ISR handler.
      */
     void isrHelper(sensorNo sensor)
     {
         byte old = m_pinsState;
-        const static byte orMask[2]  = {0x01, 0x02};
-        const static byte andMask[2] = {0x02, 0x01};
+        const static byte bitMask[2] = {0x01, 0x02};
 
         m_rotCount++;
-        m_pinsState = digitalRead(m_inputPins[sensor]) ? (m_pinsState | orMask[sensor]) : 
-                                                         (m_pinsState & andMask[sensor]);
-        m_direction = calcDirection(old, m_pinsState);
+        byte level = digitalRead(m_inputPins[sensor]);
+        m_pinsState = level ? (m_pinsState | bitMask[sensor]) : (m_pinsState & ~bitMask[sensor]);
+        rotDirection d = calcDirection(old, m_pinsState);
+        if (d == ROT_DIR_FORWARD || d == ROT_DIR_BACKWARD)
+        {
+            // Ignore errors for overall direction
+            m_direction = d;
+        }
         m_buf.push(millis(), m_rotCount, m_direction);
     }
 
@@ -181,7 +185,7 @@ WheelSensor rightWheel;
 /*
  * @brief Rotation calculation class
  *
- * This class encapsulated the collection of data from interrupt driven buffers 
+ * This class encapsulated the collection of data from interrupt driven buffers
  * and calculation (averaging) of speed over a number of samples.
  */
 RotCalc::RotCalc(rotSide side) :
@@ -212,7 +216,8 @@ bool RotCalc::handleBuffer()
     m_latest = millis();
     while ((dataAvailable = ((m_side == ROT_LEFT) ? leftWheel.getEvent(rec) : rightWheel.getEvent(rec))))
     {
-        if (m_direction != rec.direction)
+        if ((rec.direction == ROT_DIR_FORWARD || rec.direction == ROT_DIR_BACKWARD) &&
+            (m_direction != rec.direction))
         {
             // When direction changes, speed passes through zero. Therefore clear averaging buffer.
             m_wTail = 0;
@@ -255,20 +260,20 @@ bool RotCalc::handleBuffer()
         }
         m_odometer    = m_window[newest].count;
         /*
-        Serial.print("["); 
-        Serial.print(m_wCount); 
-        Serial.print("|"); 
-        Serial.print(newest); 
-        Serial.print("|"); 
-        Serial.print(oldest); 
-        Serial.print("|"); 
-        Serial.print(m_wTail); 
-        Serial.print("|"); 
-        Serial.print(m_wHead); 
-        Serial.print("|"); 
-        Serial.print(m_deltaPulse); 
-        Serial.print("|"); 
-        Serial.print(m_deltaMillis); 
+        Serial.print("[");
+        Serial.print(m_wCount);
+        Serial.print("|");
+        Serial.print(newest);
+        Serial.print("|");
+        Serial.print(oldest);
+        Serial.print("|");
+        Serial.print(m_wTail);
+        Serial.print("|");
+        Serial.print(m_wHead);
+        Serial.print("|");
+        Serial.print(m_deltaPulse);
+        Serial.print("|");
+        Serial.print(m_deltaMillis);
         Serial.print("]");
         */
     }

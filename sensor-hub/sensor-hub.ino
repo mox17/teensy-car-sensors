@@ -60,6 +60,7 @@ void setup()
 }
 
 uint32_t errorCounterTime;
+bool newWheelData = false;
 
 void loop()
 {
@@ -81,15 +82,17 @@ void loop()
         rotLeft.rotGetRec(l);
         rotRight.rotGetRec(r);
         messageHandling.wheelEvent(l, r);
+        newWheelData = true;
     }
 
     // Display when new data is available
-    if (rotLeft.newData() || rotRight.newData() || newSonarData)
+    if (newWheelData || newSonarData)
     {
         rotationStatus();
         sonarStatus();
         sonarTrack = sonarUpdate;
         Serial.println("");
+        newWheelData = false;
     }
     // Drive the RX/TX messaging queues towards RPi
     messageHandling.serialPolling();
@@ -109,6 +112,7 @@ void handleMessageQueue()
     packet *p = messageHandling.getMainLoopPacket();
     if (p != NULL)
     {
+        Serial.print("P");
         switch ((command)p->hdr.cmd)
         {
         case CMD_PONG:
@@ -180,11 +184,11 @@ void rotationStatus()
 
 void sonarStatus()
 {
+    Serial.print(" > ");
     for (int i=0;i < sonarCount; i++) {
-        Serial.print(" ");
         Serial.print(sonarResults[i] / US_ROUNDTRIP_CM); // Ping returned, uS result in ping_result, convert to cm with US_ROUNDTRIP_CM.
         Serial.print(" cm ");
-        Serial.print(sonarCounts[i]);
+        //Serial.print(sonarCounts[i]);
     }
 }
 
