@@ -10,7 +10,7 @@ class Telemetry
 public:
     Telemetry(HardwareSerial port, unsigned speed);
     void serialPolling();
-    void printErrorCounters(HardwareSerial out) const;
+    void printErrorCounters(HardwareSerial out);
     void wheelEvent(rot_one left, rot_one right);
     void sonarEvent(packet *sonarPacket);
     void sendPing(bool &ready, uint32_t &delay);
@@ -61,6 +61,7 @@ private:
     uint32_t txErrorNoBuf;    // No free tx buffers
     uint32_t txInfoSonarDrop;
     uint32_t txInfoWheelDrop;
+    bool counterUpdate;
 
     // TX data housekeeping
     packet *txCurrentPacket;  // The currently transmitting packet

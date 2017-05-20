@@ -1,18 +1,18 @@
 /*
  * Send data using byte stuffing protocol
- * 
+ *
  * Output:
  * Byte in frame has value 0x7E is changed into 2 bytes: 0x7D, 0x5E
  * Byte in frame has value 0x7D is changed into 2 bytes: 0x7D, 0x5D
  * Input:
  * When byte 0x7D is received, discard this byte, and the next byte is XORed with 0x20.
- * 
+ *
  * The telemetry code will do a best effort to send as much data as possible over the link.
  * There may be more data produced than what can be sent. It is therefore split into a number of queues.
  * 1) priorityQueue  These are messages that should NOT be dropped. For example ping/pong messages.
  * 2) sonarQueue     These are measurements of obstacle distances. These should be mixed fairly with rotationQueue.
  * 3) rotationQueue  These are measurements of the wheel rotations. These should be mixed fairly with sonarQueue.
- * 
+ *
  * When selecting what to send, first check priority queue. Then consider ultrasoundQueue and odometerQueue in alternating order.
  * If data cannot be sent, then items in ultrasoundQueue and odometerQueue can be replaced with newer measurements.
  *
@@ -40,37 +40,42 @@ Telemetry::Telemetry(HardwareSerial port, unsigned speed) :
     serialPort = port;
     initQueues();
     serialPort.begin(speed);
-    serialPort.println("ctr...");
 }
 
 /**
- * @brief Print error counter to selected serial port.
+ * @brief Print error counters to selected serial port.
+ *
+ * Only update if values changed.
  */
-void Telemetry::printErrorCounters(HardwareSerial out) const
+void Telemetry::printErrorCounters(HardwareSerial out)
 {
-    out.print( "rxErrorChecksum :");
-    out.println(rxErrorChecksum);
-    out.print( "rxErrorTooShort :");
-    out.println(rxErrorTooShort);
-    out.print( "rxErrorTooLong  :");
-    out.println(rxErrorTooLong);
-    out.print( "rxErrorBuffer   :");
-    out.println(rxErrorBuffer);
-    out.print( "rxErrorDropped  :");
-    out.println(rxErrorDropped);
-    out.print( "rxErrorUnknown  :");
-    out.println(rxErrorUnknown);
-    out.print( "txErrorNoBuf    :");
-    out.println(txErrorNoBuf);
-    out.print( "txInfoSonarDrop :");
-    out.println(txInfoSonarDrop);
-    out.print( "txInfoWheelDrop :");
-    out.println(txInfoWheelDrop);
+    if (counterUpdate)
+    {
+        out.print( "\nrxErrorChecksum :");
+        out.println(rxErrorChecksum);
+        out.print( "rxErrorTooShort :");
+        out.println(rxErrorTooShort);
+        out.print( "rxErrorTooLong  :");
+        out.println(rxErrorTooLong);
+        out.print( "rxErrorBuffer   :");
+        out.println(rxErrorBuffer);
+        out.print( "rxErrorDropped  :");
+        out.println(rxErrorDropped);
+        out.print( "rxErrorUnknown  :");
+        out.println(rxErrorUnknown);
+        out.print( "txErrorNoBuf    :");
+        out.println(txErrorNoBuf);
+        out.print( "txInfoSonarDrop :");
+        out.println(txInfoSonarDrop);
+        out.print( "txInfoWheelDrop :");
+        out.println(txInfoWheelDrop);
+        counterUpdate = false;
+    }
 }
 
 /**
  * @brief Send wheel event to RPi.
- * 
+ *
  * Replace any pending event already in queue.
  */
 void Telemetry::wheelEvent(rot_one left, rot_one right)
@@ -79,16 +84,15 @@ void Telemetry::wheelEvent(rot_one left, rot_one right)
 
     if (rotationQueue.isEmpty())
     {
-        if (!freeList.isEmpty())
+        p = getEmptyPacket();
+        if (p == NULL)
         {
-            p = freeList.pop();
-        } else {
-            txErrorNoBuf++;
             return;
         }
     } else {
         // An earlier buffer was not sent yet, so it is updated.
         txInfoWheelDrop++;
+        counterUpdate = true;
         p = rotationQueue.pop();
     }
     // At this point we have a tx buffer and the rotationQueue should be empty (or shorter)
@@ -103,7 +107,7 @@ void Telemetry::wheelEvent(rot_one left, rot_one right)
 
 /**
  * @brief Send a sonar event to RPi.
- * 
+ *
  * Replace any pending sonar event in queue for this sensor.
  */
 void Telemetry::sonarEvent(packet *sonarPacket)
@@ -116,7 +120,7 @@ void Telemetry::sonarEvent(packet *sonarPacket)
         // An earlier buffer was not sent yet, so it is updated.
         txInfoSonarDrop++;
         p = sonarQueue[sensor].pop();
-        freeList.push(p);
+        freePacket(p);
     }
     sonarPacket->ds.hdr.dst = ADDR_RPI;
     sonarPacket->ds.hdr.src = ADDR_TEENSY;
@@ -130,11 +134,9 @@ void Telemetry::sendPing(bool &ready, uint32_t &delay)
 {
     packet *p;
 
-    if (!freeList.isEmpty())
+    p = getEmptyPacket();
+    if (p == NULL)
     {
-        p = freeList.pop();
-    } else {
-        txErrorNoBuf++;
         return;
     }
     p->pp.hdr.dst = ADDR_RPI;
@@ -184,13 +186,12 @@ packet * Telemetry::txGetPacketFromQueues()
     }
     for (unsigned i=0;i<sequenceMax;i++)
     {
-        if (queueSequence[sequenceIdx]->count())
+        if (!queueSequence[sequenceIdx]->isEmpty())
         {
             packet *p = queueSequence[sequenceIdx]->pop();
-            // Next place to look...
-            sequenceIdx = ((sequenceIdx+1)%sequenceMax);
             return p;
         }
+        sequenceIdx = ((sequenceIdx+1)%sequenceMax);
     }
     return NULL;
 }
@@ -200,9 +201,9 @@ packet * Telemetry::txGetPacketFromQueues()
  */
 size_t Telemetry::getPacketLength(packet *p)
 {
-    switch ((command)p->hdr.cmd) 
+    switch ((command)p->hdr.cmd)
     {
-    case CMD_PING:  
+    case CMD_PING:
     case CMD_PONG:
         return sizeof(pingpong);
 
@@ -228,18 +229,16 @@ size_t Telemetry::getPacketLength(packet *p)
 void Telemetry::serialPolling()
 {
     // first handle incoming data
-    while (serialPort.available() > 0) 
+    while (serialPort.available() > 0)
     {
         rxHandleUartByte(serialPort.read());
     }
     // Then transmit data
-    while (serialPort.availableForWrite() > 0)
+    byte b;
+    while ((serialPort.availableForWrite() > 0) && txGetPacketByte(b))
     {
-        byte b;
-        if (txGetPacketByte(b))
-        {
-            serialPort.write(b);
-        }
+        serialPort.write(b);
+        //Serial.print(char(64+txState));
     }
 }
 
@@ -267,6 +266,7 @@ bool Telemetry::rxGetBuffer()
         return true;
     } else {
         rxErrorBuffer++;
+        counterUpdate = true;
         return false;
     }
 }
@@ -278,6 +278,7 @@ void Telemetry::rxSaveByte(byte b)
         rxCurrentPacket->raw[rxCurrentOffset++] = b;
     } else {
         rxErrorTooLong++;
+        counterUpdate = true;
         rxReInitPacket();
     }
 }
@@ -286,7 +287,7 @@ void Telemetry::rxSaveByte(byte b)
  * @brief Calculate checksum for incoming data.
  *
  * The incoming checksum is calculated when the FRAME_START_STOP byte is received.
- * The final checksum, with the checksum included, shall be 0xff 
+ * The final checksum, with the checksum included, shall be 0xff
  */
 void Telemetry::rxCalcChecksum(byte b)
 {
@@ -295,7 +296,7 @@ void Telemetry::rxCalcChecksum(byte b)
 
 /*
  * @brief Validation and processing of received packet
- * 
+ *
  * The indicated length is 1 longer than actual payload because of checksum byte.
  */
 bool Telemetry::rxEndOfPacketHandling()
@@ -304,18 +305,21 @@ bool Telemetry::rxEndOfPacketHandling()
     if ((rxChecksum != 0xff))
     {
         rxErrorChecksum++;
+        counterUpdate = true;
         rxReInitPacket(); // recycle current rx buffer in place
         return false;
     }
     if (rxCurrentOffset <= sizeof(header))
     {
         rxErrorTooShort++;
+        counterUpdate = true;
         rxReInitPacket();
         return false;
     }
     if (rxCurrentOffset > (MAX_MSG_SIZE+1))
     {
         rxErrorTooLong++;
+        counterUpdate = true;
         rxReInitPacket();
         return false;
     }
@@ -370,11 +374,12 @@ bool Telemetry::rxEndOfPacketHandling()
 
         default:
             rxErrorUnknown++;
+            counterUpdate = true;
             break;
         }
         if (p != NULL)
         {
-            freeList.push(p);
+            freePacket(p);
         }
     } else {
         // Packet was not for this processor
@@ -385,13 +390,13 @@ bool Telemetry::rxEndOfPacketHandling()
 
 void Telemetry::rxPacketForwarding(packet *p)
 {
-    // There is no forwarding at this point, so free buffer.
-    freeList.push(p);
+    // There is no paket forwarding implemented, so free buffer.
+    freePacket(p);
 }
 
 /**
- * @brief Handle incoming bytes from UART. 
- * 
+ * @brief Handle incoming bytes from UART.
+ *
  * This function is called from polling loop.
  */
 void Telemetry::rxHandleUartByte(byte b)
@@ -414,6 +419,7 @@ void Telemetry::rxHandleUartByte(byte b)
             rxState = RS_DATA;
         } else {
             rxErrorDropped++;
+            counterUpdate = true;
         }
         break;
 
@@ -427,10 +433,10 @@ void Telemetry::rxHandleUartByte(byte b)
             rxEndOfPacketHandling();
         } else {
             rxCalcChecksum(b);
-            rxSaveByte(b);        
+            rxSaveByte(b);
         }
         break;
-    
+
     case RS_ESCAPE:
         rxCalcChecksum(b);
         rxSaveByte(b ^ FRAME_XOR);
@@ -452,7 +458,7 @@ bool Telemetry::txEndOfPacketHandling()
 
     if (txCurrentPacket != NULL)
     {
-        freeList.push(txCurrentPacket);
+        freePacket(txCurrentPacket);
         txCurrentPacket = NULL;
     }
     p = txGetPacketFromQueues();
@@ -462,6 +468,7 @@ bool Telemetry::txEndOfPacketHandling()
         txCurrentOffset = 0;
         txTotalSize = getPacketLength(p);
         txChecksum = 0;
+        txState = TS_BEGIN;
         return true;
     }
     return false;
@@ -473,7 +480,7 @@ bool Telemetry::txEndOfPacketHandling()
  * Pull bytes one-by-one from buffer with framing, stuffing and checksum calculation.
  * This function drives the whole tx side, from pulling messages from queues to
  * sending packetized records to RPi.
- * 
+ *
  * @return true if a byte is available for transmission.
  * @param b the variable where byte is returned.
  */
@@ -514,7 +521,7 @@ bool Telemetry::txGetPacketByte(byte &b)
             txState = TS_END;
         }
         break;
-    
+
     case TS_CHECKSUM_ESC:
         b = txEscByte;
         txState = TS_END;
@@ -579,6 +586,7 @@ packet* Telemetry::getEmptyPacket()
         return freeList.pop();
     } else {
         txErrorNoBuf++;
+        counterUpdate = true;
     }
     return NULL;
 }

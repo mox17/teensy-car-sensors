@@ -8,7 +8,7 @@
 void sonarReport(int id, int value, unsigned long time_in_ms);
 
 // Hall-effect pin configuration
-const int ledPin   = 13;  // Flash LED on hall-effect state change 
+const int ledPin   = 13;  // Flash LED on hall-effect state change
 const int hallPinL1 = 5;
 const int hallPinL2 = 6;
 const int hallPinR1 = -1;
@@ -16,7 +16,7 @@ const int hallPinR2 = -1;
 
 // Sonar setup
 const int maxDistance = 200; // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
-const int ultraSound1TrigPin = 10; 
+const int ultraSound1TrigPin = 10;
 const int ultraSound2TrigPin = 11;
 const int ultraSound3TrigPin = 12;
 const int sonarPins[] = {ultraSound1TrigPin, ultraSound2TrigPin, ultraSound3TrigPin};
@@ -37,39 +37,54 @@ Telemetry messageHandling(Serial1, 115200);
 RotCalc rotLeft = RotCalc(ROT_LEFT);
 RotCalc rotRight = RotCalc(ROT_RIGHT);
 
-void setup() 
+void setup()
 {
     Serial.begin(115200);
     pinMode(ledPin, OUTPUT);
-  
+
     // Wheel sensor configuration
     Rotation(hallPinL1, hallPinL2, hallPinR1, hallPinR2);
     loopTimer = millis(); // Start now.
-  
-    sonarArray.startSonar();
+    //sonarArray.startSonar();
     // Control ultrasound sensor sequencing
     //int sequence[] = {2,1,1,0,0,0,1,1};
     //sonarArray.setSequence(8, sequence);
+    Serial.print("header:");
+    Serial.println(sizeof(header));
+    Serial.print("rot_one:");
+    Serial.println(sizeof(rot_one));
+    Serial.print("rotation:");
+    Serial.println(sizeof(rotation));
+    Serial.print("packet:");
+    Serial.println(sizeof(packet));
 }
+
+uint32_t errorCounterTime;
 
 void loop()
 {
     bool newSonarData = (sonarTrack != sonarUpdate);
 
+    if (millis() > errorCounterTime)
+    {
+        errorCounterTime = millis() + 1000;
+        messageHandling.printErrorCounters(Serial1);
+    }
+
     rotLeft.handleBuffer();
     rotRight.handleBuffer();
     if (rotLeft.newData() || rotRight.newData())
     {
-        // When there is new data put a message on the queue for 
+        // When there is new data put a message on the queue for
         // transmission to RPi
         rot_one l, r;
         rotLeft.rotGetRec(l);
         rotRight.rotGetRec(r);
         messageHandling.wheelEvent(l, r);
     }
-  
+
     // Display when new data is available
-    if (rotLeft.newData() || rotRight.newData() || newSonarData) 
+    if (rotLeft.newData() || rotRight.newData() || newSonarData)
     {
         rotationStatus();
         sonarStatus();
@@ -84,7 +99,7 @@ void loop()
 /**
  * @brief Handling of messages sent to main loop.
  *
- * These messages can originate from RPi, or they can originate from 
+ * These messages can originate from RPi, or they can originate from
  * interrupt handling.
  */
 void handleMessageQueue()
@@ -173,9 +188,13 @@ void sonarStatus()
     }
 }
 
-// Callback from sonar timer handler - be quick!
+/**
+ * @brief Callback from sonar timer handler - be quick!
+ *
+ */
 void sonarReport(int id, int value, unsigned long time_in_ms)
 {
+    Serial1.print('=');
     packet *p = messageHandling.getEmptyPacket();
     if (p)
     {
