@@ -5,20 +5,21 @@
 #include "rotation.h"
 #include "telemetry.h"
 
-void sonarReport(int id, int value, unsigned long time_in_ms);
+const int ledPin   = 13;  // Flash LED on hall-effect state change
 
 // Hall-effect pin configuration
-const int ledPin   = 13;  // Flash LED on hall-effect state change
-const int hallPinL1 = 5;
-const int hallPinL2 = 6;
-const int hallPinR1 = -1;
-const int hallPinR2 = -1;
+const int hallPinL1 = 23;
+const int hallPinL2 = 22;
+const int hallPinR1 = 21;
+const int hallPinR2 = 20;
 
 // Sonar setup
+void sonarReport(int id, int value, unsigned long time_in_ms);
+
 const int maxDistance = 200; // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
-const int ultraSound1TrigPin = 10;
-const int ultraSound2TrigPin = 11;
-const int ultraSound3TrigPin = 12;
+const int ultraSound1TrigPin = 2;
+const int ultraSound2TrigPin = 3;
+const int ultraSound3TrigPin = 4;
 const int sonarPins[] = {ultraSound1TrigPin, ultraSound2TrigPin, ultraSound3TrigPin};
 const int sonarCount = 3;//sizeof(sonarPins)/sizeof(sonarPins[0]);
 
@@ -45,18 +46,10 @@ void setup()
     // Wheel sensor configuration
     Rotation(hallPinL1, hallPinL2, hallPinR1, hallPinR2);
     loopTimer = millis(); // Start now.
-    //sonarArray.startSonar();
+    sonarArray.startSonar();
     // Control ultrasound sensor sequencing
     //int sequence[] = {2,1,1,0,0,0,1,1};
     //sonarArray.setSequence(8, sequence);
-    Serial.print("header:");
-    Serial.println(sizeof(header));
-    Serial.print("rot_one:");
-    Serial.println(sizeof(rot_one));
-    Serial.print("rotation:");
-    Serial.println(sizeof(rotation));
-    Serial.print("packet:");
-    Serial.println(sizeof(packet));
 }
 
 uint32_t errorCounterTime;

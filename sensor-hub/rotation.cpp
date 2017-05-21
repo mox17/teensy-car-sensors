@@ -138,7 +138,12 @@ public:
         pinMode(pin1, INPUT_PULLUP);
         pinMode(pin2, INPUT_PULLUP);
         attachInterrupt(digitalPinToInterrupt(pin1), isr1, CHANGE);
+
+        uint32_t m1, m2;
+        m1 = micros();
         attachInterrupt(digitalPinToInterrupt(pin2), isr2, CHANGE);
+        m2 = micros();
+        Serial.println(m2-m1);
     }
     /**
      * @brief This function is called from ISR handler.
