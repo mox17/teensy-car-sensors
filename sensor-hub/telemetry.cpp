@@ -89,7 +89,7 @@ void Telemetry::wheelEvent(rot_one left, rot_one right)
         // An earlier buffer was not sent yet, so it is updated.
         cnt.inc(txInfoWheelDrop);
         counterUpdate = true;
-        p = rotationQueue.pop();
+        p = (packet*)rotationQueue.pop();
     }
     // At this point we have a tx buffer and the rotationQueue should be empty (or shorter)
     p->rt.hdr.dst = ADDR_RPI;
@@ -115,7 +115,7 @@ void Telemetry::sonarEvent(packet *sonarPacket)
         packet *p;
         // An earlier buffer was not sent yet, so it is updated.
         cnt.inc(txInfoSonarDrop);
-        p = sonarQueue[sensor].pop();
+        p = (packet*)sonarQueue[sensor].pop();
         freePacket(p);
     }
     sonarPacket->ds.hdr.dst = ADDR_RPI;
@@ -179,13 +179,13 @@ packet * Telemetry::txGetPacketFromQueues()
     // First check priority queue
     if (!priorityQueue.isEmpty())
     {
-        return priorityQueue.pop();
+        return (packet*)priorityQueue.pop();
     }
     for (unsigned i=0;i<sequenceMax;i++)
     {
         if (!queueSequence[sequenceIdx]->isEmpty())
         {
-            packet *p = queueSequence[sequenceIdx]->pop();
+            packet *p = (packet*)queueSequence[sequenceIdx]->pop();
             return p;
         }
         sequenceIdx = ((sequenceIdx+1)%sequenceMax);
@@ -261,7 +261,7 @@ bool Telemetry::rxGetBuffer()
 {
     if (freeList.count())
     {
-        rxCurrentPacket = freeList.pop();
+        rxCurrentPacket = (packet*)freeList.pop();
         rxReInitPacket();
         return true;
     } else {
@@ -570,7 +570,7 @@ packet* Telemetry::getMainLoopPacket()
 {
     if (!mainLoop.isEmpty())
     {
-        return mainLoop.pop();
+        return (packet*)mainLoop.pop();
     }
     return NULL;
 }
@@ -587,7 +587,7 @@ packet* Telemetry::getEmptyPacket()
 {
     if (!freeList.isEmpty())
     {
-        return freeList.pop();
+        return (packet*)freeList.pop();
     } else {
         cnt.inc(txErrorNoBuf);
         counterUpdate = true;

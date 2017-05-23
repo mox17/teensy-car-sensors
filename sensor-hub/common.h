@@ -24,7 +24,7 @@
  *
  */
 #pragma once
-
+#include "queuelist.h"
 // Packet framing (inspired by PPP)
 #define FRAME_START_STOP  0x7e
 #define FRAME_DATA_ESCAPE 0x7d
@@ -46,7 +46,7 @@ enum command
     CMD_US_STATUS  = 6,  // sensor id + distance
     CMD_ROT_STATUS = 7,  // direction, speed, odo
     CMD_ROT_RESET  = 8,  // Clear odometer
-    CMD_ERR_COUNT  = 9   // Error counter
+    CMD_ERR_COUNT  = 9   // Error counter name and value
 };
 
 struct header
@@ -146,16 +146,16 @@ union payload
 
 const size_t MAX_MSG_SIZE = sizeof(payload);
 
-/*
- * This union contains all possible messages.
- */
-typedef union
+struct packet : node
 {
-    uint8_t raw[MAX_MSG_SIZE+4]; // Raw bytes (for UART RX and RX). Allow 1 byte extra for checksum
-    struct header hdr;        // Minimal header for decoding
-    struct pingpong pp;       // message specific layouts...
-    struct sequence sq;
-    struct distance ds;
-    struct rotation rt;
-    struct errorcount ec;
-} __attribute__((packed)) packet;
+    union
+    {
+        uint8_t raw[MAX_MSG_SIZE+4]; // Raw bytes (for UART RX and RX). Allow 1 byte extra for checksum
+        struct header hdr;        // Minimal header for decoding
+        struct pingpong pp;       // message specific layouts...
+        struct sequence sq;
+        struct distance ds;
+        struct rotation rt;
+        struct errorcount ec;
+    };
+} __attribute__((packed));

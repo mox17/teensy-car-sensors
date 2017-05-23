@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include <HardwareSerial.h>
 #include "common.h"
-#include <QueueList.h>
+#include "queuelist.h"
 
 class Telemetry
 {
@@ -39,13 +39,13 @@ private:
 
     HardwareSerial serialPort;
     // Outgoing packet queues
-    QueueList <packet *> priorityQueue;  // allow for 4
-    QueueList <packet *> rotationQueue;  // allow for 2
-    QueueList <packet *> sonarQueue[MAX_NO_OF_SONAR]; // allow for 6+2
+    queuelist priorityQueue;  // allow for 4
+    queuelist rotationQueue;  // allow for 2
+    queuelist sonarQueue[MAX_NO_OF_SONAR]; // allow for 6+2
     // Free buffers
-    QueueList <packet *> freeList;
+    queuelist freeList;
     // Internal processing queue
-    QueueList <packet *> mainLoop;
+    queuelist mainLoop;
 
     // RX data housekeeping
     packet *rxCurrentPacket;  // Packet being received
@@ -74,7 +74,7 @@ private:
     // Mechanism to cycle between available output queues
     uint16_t sequenceIdx;
     static const unsigned sequenceMax = MAX_NO_OF_SONAR+1; // sonars + wheels
-    QueueList <packet *> * queueSequence[sequenceMax];  // This is used to cycle between queues
+    queuelist* queueSequence[sequenceMax];  // This is used to cycle between queues
 
     // Functions
     void initQueues();
