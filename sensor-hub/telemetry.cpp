@@ -234,7 +234,7 @@ void Telemetry::serialPolling()
     while ((serialPort.availableForWrite() > 0) && txGetPacketByte(b))
     {
         serialPort.write(b);
-        //Serial.print(char(64+txState));
+        cnt.inc(txBytes);
     }
 }
 
@@ -458,6 +458,7 @@ bool Telemetry::txEndOfPacketHandling()
     {
         freePacket(txCurrentPacket);
         txCurrentPacket = NULL;
+        cnt.inc(txPackets);
     }
     p = txGetPacketFromQueues();
     if (p != NULL)
@@ -498,6 +499,7 @@ bool Telemetry::txGetPacketByte(byte &b)
         {
             txEscByte = b ^ FRAME_XOR;
             b = FRAME_DATA_ESCAPE;
+            txState = TS_ESCAPE;
         } else {
             txState = (txCurrentOffset < txTotalSize) ? TS_DATA : TS_CHKSUM;
         }

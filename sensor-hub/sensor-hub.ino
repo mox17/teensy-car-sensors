@@ -63,7 +63,7 @@ void loop()
     if (millis() > errorCounterTime)
     {
         errorCounterTime = millis() + 1000;
-        messageHandling.printErrorCounters(Serial1);
+        cnt.printNZ();
     }
 
     rotLeft.handleBuffer();
@@ -145,7 +145,6 @@ void handleMessageQueue()
                 cnt.inc(badSonarId);
             }
             sonarArray.nextSonar();
-            digitalWrite(ledPin, true);
             break;
 
         case CMD_ROT_RESET:
@@ -205,5 +204,4 @@ void sonarReport(int id, int value, unsigned long time_in_ms)
         p->ds.when = time_in_ms;
         messageHandling.putMainLoopPacket(p);
     }
-    digitalWrite(ledPin, false);
 }

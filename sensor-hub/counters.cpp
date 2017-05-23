@@ -15,7 +15,10 @@ bool Counters::flags[CounterCount];
 
     void Counters::printCounter(counters name)
     {
+        const char spaces[] = "                      : ";
+        unsigned l = strlen(CounterNames[name]);
         Serial.print(CounterNames[name]);
+        Serial.print(spaces+l);
         Serial.println(counts[name]);
     }
 

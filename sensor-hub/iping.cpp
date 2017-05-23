@@ -41,20 +41,23 @@ boolean IPing::pingTrigger()
     while ((*m_echoIn & m_echoBit) && (micros() <= m_maxTime))
     { // Wait for echo pin to clear.
     }
+    digitalWrite(13,true);
     while (!(*m_echoIn & m_echoBit))
     {
         // Wait for ping to start.
         if (micros() > m_maxTime)
         {
+            digitalWrite(13,false);
             return false;
         }
     }
-    m_maxTime = micros() + m_maxEchoTime; // Ping started, set the timeout.
+    digitalWrite(13,false);
+    m_maxTime = micros() + m_maxEchoTime;
     timerMicroS(m_maxTime, pingTimeout);
     // Use interrupt to determine echo time
     currentEchoPin = m_echoPin;
     attachInterrupt(currentEchoPin, isrEcho, FALLING);
-    return true;                         // Ping started successfully.
+    return true;
 }
 
 void (*reportFunction)(unsigned long);
