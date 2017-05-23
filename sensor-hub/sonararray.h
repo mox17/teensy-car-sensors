@@ -13,6 +13,7 @@ public:
         SONAR_STOPPED,   // No pinging
         SONAR_IDLE,      // Waiting to ping (timer running)
         SONAR_PING_SENT, // Waiting for echo
+        SONAR_PING_ERROR // Error when initiating ping
     };
     SonarArray(int noOfPins, const int* pins, int maxDistance, void(*report)(int id, int value, unsigned long time_in_ms));
     void startSonar();
@@ -24,6 +25,7 @@ public:
     static IPing* m_currentSensor;
     static void(*m_report)(int id, int value, unsigned long time_in_ms);
     static SonarArray* getInstance();
+    sonarState getState();
 
 private:
     static const int MAX_PINS=MAX_NO_OF_SONAR;

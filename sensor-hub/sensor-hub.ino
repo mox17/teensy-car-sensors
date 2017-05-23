@@ -15,7 +15,7 @@ const int hallPinR1 = 21;
 const int hallPinR2 = 20;
 
 // Sonar setup
-void sonarReport(int id, int value, unsigned long time_in_ms);
+void mainSonarReport(int id, int value, unsigned long time_in_ms);
 
 const int maxDistance = 200; // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
 const int ultraSound1TrigPin = 2;
@@ -29,7 +29,7 @@ volatile unsigned int sonarCounts[MAX_NO_OF_SONAR] = {0}; // Number of reports
 volatile unsigned long sonarTiming[MAX_NO_OF_SONAR] = {0}; // Timestamp;
 volatile int sonarUpdate = 0;      // sonar event counter - updated from interrupt context
 int sonarTrack = 0;                // Compare with sonarUpdate to determine updates
-SonarArray sonarArray(sonarCount, sonarPins, maxDistance, sonarReport);
+SonarArray sonarArray(sonarCount, sonarPins, maxDistance, mainSonarReport);
 
 unsigned loopTimer;
 unsigned rotationUpdate=0;  // When was last time a wheel update was done
@@ -64,6 +64,12 @@ void loop()
     {
         errorCounterTime = millis() + 1000;
         cnt.printNZ();
+        cnt.sendNZ();
+        if (sonarArray.getState() == SonarArray::SONAR_PING_ERROR)
+        {
+            // Try a restart
+            sonarArray.startSonar();
+        }
     }
 
     rotLeft.handleBuffer();
@@ -189,7 +195,7 @@ void sonarStatus()
 /**
  * @brief Callback from sonar timer handler - be quick!
  */
-void sonarReport(int id, int value, unsigned long time_in_ms)
+void mainSonarReport(int id, int value, unsigned long time_in_ms)
 {
     //Serial.print('R');
     packet *p = messageHandling.getEmptyPacket();

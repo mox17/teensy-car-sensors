@@ -1,4 +1,7 @@
 #include "counters.h"
+#include "telemetry.h"
+
+extern Telemetry messageHandling;
 
 static char const * CounterNames[] = {
     NAMED_COUNTERS(DO_NAME)
@@ -29,6 +32,17 @@ bool Counters::flags[CounterCount];
             if (counts[i])
             {
                 printCounter((counters)i);
+            }
+        }
+    }
+
+    void Counters::sendNZ()
+    {
+        for (unsigned i=0; i<CounterCount; i++)
+        {
+            if (counts[i])
+            {
+                messageHandling.errorCounter(counts[i],CounterNames[i]);
             }
         }
     }

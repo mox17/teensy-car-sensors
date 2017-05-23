@@ -120,6 +120,7 @@ void Telemetry::sonarEvent(packet *sonarPacket)
     }
     sonarPacket->ds.hdr.dst = ADDR_RPI;
     sonarPacket->ds.hdr.src = ADDR_TEENSY;
+    sonarPacket->ds.hdr.reserved = 0;
     sonarQueue[sensor].push(sonarPacket);
 }
 
@@ -218,6 +219,9 @@ size_t Telemetry::getPacketLength(packet *p)
 
     case CMD_ROT_RESET:
         return sizeof(header);
+
+    case CMD_ERR_COUNT:
+        return sizeof(errorcount);
     }
     return 0;
 }
@@ -596,5 +600,20 @@ void Telemetry::putMainLoopPacket(packet *p)
     if (p != NULL)
     {
         mainLoop.push(p);
+    }
+}
+
+void Telemetry::errorCounter(uint32_t count, char const *name)
+{
+    packet *p = getEmptyPacket();
+    if (p)
+    {
+        p->ec.hdr.dst = ADDR_RPI;
+        p->ec.hdr.src = ADDR_TEENSY;
+        p->ec.hdr.cmd = CMD_ERR_COUNT;
+        p->ec.hdr.reserved = 0;
+        p->ec.count = count;
+        strncpy(p->ec.name, name, sizeof(p->ec.name));
+        priorityQueue.push(p);
     }
 }

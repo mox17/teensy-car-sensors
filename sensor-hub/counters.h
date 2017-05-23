@@ -40,6 +40,7 @@ public:
     static void inc(counters name);
     static void printCounter(counters name);
     static void printNZ();
+    static void sendNZ();
     static void printChanged();
     static uint32_t count(counters name);
     static char const * name(counters name);

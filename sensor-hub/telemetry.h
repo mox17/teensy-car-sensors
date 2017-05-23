@@ -18,6 +18,7 @@ public:
     void freePacket(packet *p);
     packet *getEmptyPacket();
     void putMainLoopPacket(packet *p);
+    void errorCounter(uint32_t count, char const *name);
 
 private:
     enum receiveStates {
@@ -67,7 +68,7 @@ private:
     uint32_t *pingDelay;
 
     // Static array of packet buffers to flow around the queues
-    static const unsigned bufferCount = 4+2+6+2;
+    static const unsigned bufferCount = 32;
     packet packetPool[bufferCount];
 
     // Mechanism to cycle between available output queues

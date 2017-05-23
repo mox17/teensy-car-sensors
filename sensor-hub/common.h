@@ -45,7 +45,8 @@ enum command
     CMD_US_START   = 5,  // Start Ultrasound sensors
     CMD_US_STATUS  = 6,  // sensor id + distance
     CMD_ROT_STATUS = 7,  // direction, speed, odo
-    CMD_ROT_RESET  = 8   // Clear odometer
+    CMD_ROT_RESET  = 8,  // Clear odometer
+    CMD_ERR_COUNT  = 9   // Error counter
 };
 
 struct header
@@ -126,6 +127,13 @@ struct rotation
     struct rot_one rot[2]; // Indexed with enumeration rotSide
 } __attribute__((packed));
 
+struct errorcount
+{
+    struct header hdr;
+    uint32_t count;  // Counter value
+    char name[24];   // ASCIIZ name
+} __attribute__((packed));
+
 // This union is only for calculating max message size
 union payload
 {
@@ -133,6 +141,7 @@ union payload
     struct sequence sq;
     struct distance ds;
     struct rotation rt;
+    struct errorcount ec;
 } __attribute__((packed));
 
 const size_t MAX_MSG_SIZE = sizeof(payload);
@@ -148,4 +157,5 @@ typedef union
     struct sequence sq;
     struct distance ds;
     struct rotation rt;
+    struct errorcount ec;
 } __attribute__((packed)) packet;

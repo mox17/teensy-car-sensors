@@ -98,7 +98,7 @@ void isrEcho()
         IPing::timerStop();
         IPing::calculateTime();
         detachInterrupt(currentEchoPin);
-        Serial.println(char(97+currentEchoPin));
+        //Serial.println(char(97+currentEchoPin));
         currentEchoPin = 0;
         IPing::calculateTime();
         if (reportFunction)
@@ -119,7 +119,7 @@ void pingTimeout()
         detachInterrupt(currentEchoPin);
     }
     IPing::itimer.end();
-    Serial.println(char(64+currentEchoPin));
+    //Serial.println(char(64+currentEchoPin));
     currentEchoPin = 0;
     IPing::pingResult = 0;
     if (reportFunction)

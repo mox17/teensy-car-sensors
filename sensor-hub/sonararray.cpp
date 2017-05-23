@@ -49,13 +49,13 @@ void SonarArray::startSonar()
             m_state = SONAR_PING_SENT;
         } else {
             cnt.inc(pingFail);
+            m_state = SONAR_PING_ERROR;
         }
     }
 }
 
 void SonarArray::nextSonar()
 {
-    //Serial.println("nextSonar");
     if (m_state != SONAR_STOPPED)
     {
         ++m_current;
@@ -80,6 +80,11 @@ void SonarArray::setSequence(byte length, byte seq[])
 bool SonarArray::sonarRunning()
 {
     return (m_state == SONAR_IDLE || m_state == SONAR_PING_SENT);
+}
+
+SonarArray::sonarState SonarArray::getState()
+{
+    return m_state;
 }
 
 /**
