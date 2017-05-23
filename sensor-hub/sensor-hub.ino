@@ -79,7 +79,7 @@ void loop()
     }
 
     // Display when new data is available
-    if (newWheelData || newSonarData)
+    if (false && (newWheelData || newSonarData))
     {
         rotationStatus();
         sonarStatus();
@@ -105,7 +105,6 @@ void handleMessageQueue()
     packet *p = messageHandling.getMainLoopPacket();
     if (p != NULL)
     {
-        Serial.print("P");
         switch ((command)p->hdr.cmd)
         {
         case CMD_PONG:
@@ -144,6 +143,7 @@ void handleMessageQueue()
             } else {
                 // TODO malformed command error counter
             }
+            sonarArray.nextSonar();
             break;
 
         case CMD_ROT_RESET:
@@ -187,11 +187,10 @@ void sonarStatus()
 
 /**
  * @brief Callback from sonar timer handler - be quick!
- *
  */
 void sonarReport(int id, int value, unsigned long time_in_ms)
 {
-    Serial1.print('=');
+    //Serial.print('R');
     packet *p = messageHandling.getEmptyPacket();
     if (p)
     {

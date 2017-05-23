@@ -6,6 +6,7 @@
 #include "sonararray.h"
 
 void sonarEchoCheck();
+void sonarReport(unsigned long microsec);
 
 ESPing* SonarArray::m_currentSensor;                                     // Pointer to current sensor - for use in callback
 void(*SonarArray::m_report)(int id, int value, unsigned long time_in_ms); // reporting function
@@ -42,9 +43,8 @@ void SonarArray::startSonar()
             m_current = 0;
         }
         sensorId = m_sequence[m_current];
-//        Serial1.print(char(48+sensorId));
         SonarArray::m_currentSensor = m_sensorArray[sensorId];
-        SonarArray::m_currentSensor->ping_timer(sonarEchoCheck);
+        SonarArray::m_currentSensor->pingAsync(sonarReport);
         m_state = SONAR_PING_SENT;
     }
 }
@@ -79,26 +79,9 @@ bool SonarArray::sonarRunning()
 }
 
 /**
- * @brief Timer2 interrupt calls this function every 24uS where you can check the ping status.
+ * @brief callback from ping ISR handler
  */
-unsigned long lastTime;
-unsigned long intervalTime;
-void sonarEchoCheck()
+void sonarReport(unsigned long microsec)
 {
-    unsigned long now = micros();
-    PingTimerReturn ct = SonarArray::m_currentSensor->check_timer();
-    intervalTime = now-lastTime;
-    lastTime = now;
-    if (ct == PING_ECHO)
-    {
-        Serial1.print('E');
-        SonarArray::m_report(sensorId, SonarArray::m_currentSensor->ping_result, millis());
-        SonarArray::getInstance()->nextSonar();
-    }
-    else if (ct == PING_TIMEOUT)
-    {
-        Serial1.print('T');
-        SonarArray::getInstance()->nextSonar();
-    }
+    SonarArray::m_report(sensorId, microsec, millis());
 }
-
