@@ -1,14 +1,14 @@
-/*
- *  This class encapsulates the use of a HC-SR04 style sonar
- *
+/**
+ * @brief This class encapsulates the use of a HC-SR04 style sonar
  */
-#include "ESPing.h"
+#include "iping.h"
 #include "sonararray.h"
+#include "counters.h"
 
 void sonarEchoCheck();
 void sonarReport(unsigned long microsec);
 
-ESPing* SonarArray::m_currentSensor;                                     // Pointer to current sensor - for use in callback
+IPing* SonarArray::m_currentSensor;                                     // Pointer to current sensor - for use in callback
 void(*SonarArray::m_report)(int id, int value, unsigned long time_in_ms); // reporting function
 int sensorId;                                                             // ID to use from callback
 SonarArray * SonarArray::m_instance;                                      // Getting the instance from interrupt
@@ -22,7 +22,7 @@ SonarArray::SonarArray(int noOfPins, const int* pins, int maxDistance, void(*rep
     for (int i=0; i < noOfPins; i++)
     {
         m_pins[i] = pins[i];
-        m_sensorArray[i] = new ESPing(m_pins[i], m_pins[i], maxDistance);
+        m_sensorArray[i] = new IPing(m_pins[i], m_pins[i], maxDistance);
         m_sequence[i] = i;
     }
     m_report = report;
@@ -44,8 +44,12 @@ void SonarArray::startSonar()
         }
         sensorId = m_sequence[m_current];
         SonarArray::m_currentSensor = m_sensorArray[sensorId];
-        SonarArray::m_currentSensor->pingAsync(sonarReport);
-        m_state = SONAR_PING_SENT;
+        if (SonarArray::m_currentSensor->pingAsync(sonarReport))
+        {
+            m_state = SONAR_PING_SENT;
+        } else {
+            cnt.inc(pingFail);
+        }
     }
 }
 

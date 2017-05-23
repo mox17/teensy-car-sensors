@@ -19,10 +19,10 @@
 #define NO_ECHO 0               // Value returned if there's no ping echo within the specified MAX_SENSOR_DISTANCE or max_cm_distance.
 #define MAX_SENSOR_DELAY 18000  // Maximum uS it takes for sensor to start the ping (SRF06 is the highest measured, just under 18ms).
 
-class ESPing
+class IPing
 {
 public:
-    ESPing(uint8_t trigPin, uint8_t echoPin, int maxDistCm = MAX_SENSOR_DISTANCE);
+    IPing(uint8_t trigPin, uint8_t echoPin, int maxDistCm = MAX_SENSOR_DISTANCE);
 	bool pingAsync(void (*reportFunc)(unsigned long));
     static unsigned long pingResult;
     static void timerMicroS(unsigned int period, void (*userFunc)(void));

@@ -4,6 +4,7 @@
 #include "sonararray.h"
 #include "rotation.h"
 #include "telemetry.h"
+#include "counters.h"
 
 const int ledPin   = 13;  // Flash LED on hall-effect state change
 
@@ -117,7 +118,7 @@ void handleMessageQueue()
             {
                 sonarArray.setSequence(p->sq.len, p->sq.sequence);
             } else {
-                // TODO malformed command error counter
+                cnt.inc(badSeqCommand);
             }
             break;
 
@@ -141,9 +142,10 @@ void handleMessageQueue()
                 messageHandling.sonarEvent(p);
                 p = NULL;
             } else {
-                // TODO malformed command error counter
+                cnt.inc(badSonarId);
             }
             sonarArray.nextSonar();
+            digitalWrite(ledPin, true);
             break;
 
         case CMD_ROT_RESET:
@@ -154,7 +156,7 @@ void handleMessageQueue()
         default:
             Serial.print("Unknown CMD ");
             Serial.println(p->hdr.cmd);
-            // TODO malformed command error counter
+            cnt.inc(unknownCommand);
             break;
         }
         if (p != NULL)
@@ -203,4 +205,5 @@ void sonarReport(int id, int value, unsigned long time_in_ms)
         p->ds.when = time_in_ms;
         messageHandling.putMainLoopPacket(p);
     }
+    digitalWrite(ledPin, false);
 }

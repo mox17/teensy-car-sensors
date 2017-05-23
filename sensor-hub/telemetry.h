@@ -52,15 +52,6 @@ private:
     uint16_t rxCurrentOffset; // Bytes received so far
     uint16_t rxChecksum;      // Checksum so far
     // Error counters
-    uint32_t rxErrorChecksum; // Number of packets with checksum errors
-    uint32_t rxErrorTooShort; // Number of too short packets (not even a header)
-    uint32_t rxErrorTooLong;  // Number of packets exceeding max length.
-    uint32_t rxErrorBuffer;   // No receive buffer available
-    uint32_t rxErrorDropped;  // Number of bytes thrown away while looking for sync
-    uint32_t rxErrorUnknown;  // Unknown command
-    uint32_t txErrorNoBuf;    // No free tx buffers
-    uint32_t txInfoSonarDrop;
-    uint32_t txInfoWheelDrop;
     bool counterUpdate;
 
     // TX data housekeeping

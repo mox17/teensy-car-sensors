@@ -1,12 +1,12 @@
-#include "ESPing.h"
+#include "iping.h"
 #include <IntervalTimer.h>
 
-IntervalTimer ESPing::itimer;
-unsigned int ESPing::m_maxEchoTime;
-unsigned long ESPing::m_maxTime;
-unsigned long ESPing::pingResult;
+IntervalTimer IPing::itimer;
+unsigned int IPing::m_maxEchoTime;
+unsigned long IPing::m_maxTime;
+unsigned long IPing::pingResult;
 
-ESPing::ESPing(uint8_t trigPin, uint8_t echoPin, int maxDistCm)
+IPing::IPing(uint8_t trigPin, uint8_t echoPin, int maxDistCm)
 {
     m_trigBit = digitalPinToBitMask(trigPin); // Get the port register bitmask for the trigger pin.
     m_echoBit = digitalPinToBitMask(echoPin);  // Get the port register bitmask for the echo pin.
@@ -27,7 +27,7 @@ byte currentEchoPin=0;
 /*
  * @brief Send trigger signal to sonar
  */
-boolean ESPing::pingTrigger()
+boolean IPing::pingTrigger()
 {
     *m_trigMode |= m_trigBit;  // Set trigger pin to output.
     *m_trigOut &= ~m_trigBit;  // Set the trigger pin low, should already be low, but this will make sure it is.
@@ -59,7 +59,7 @@ boolean ESPing::pingTrigger()
 
 void (*reportFunction)(unsigned long);
 
-bool ESPing::pingAsync(void (*report)(unsigned long))
+bool IPing::pingAsync(void (*report)(unsigned long))
 {
     reportFunction = report; // Callback (interrupt context)
     bool result = pingTrigger();
@@ -68,19 +68,19 @@ bool ESPing::pingAsync(void (*report)(unsigned long))
 
 void (*itimerCallback)();
 
-void ESPing::timerMicroS(unsigned int microseconds, void (*userFunc)(void))
+void IPing::timerMicroS(unsigned int microseconds, void (*userFunc)(void))
 {
     itimer.end();
     itimerCallback = userFunc; // User's function to call when there's a timer event.
     itimer.begin(itimerCallback, microseconds);
 }
 
-void ESPing::timerStop()
+void IPing::timerStop()
 {
     itimer.end();
 }
 
-void ESPing::calculateTime()
+void IPing::calculateTime()
 {
     pingResult = (micros() - (m_maxTime - m_maxEchoTime) - 13);
 }
@@ -92,15 +92,15 @@ void isrEcho()
 {
     if (currentEchoPin)
     {
-        ESPing::timerStop();
-        ESPing::calculateTime();
+        IPing::timerStop();
+        IPing::calculateTime();
         detachInterrupt(currentEchoPin);
         Serial.println(char(97+currentEchoPin));
         currentEchoPin = 0;
-        ESPing::calculateTime();
+        IPing::calculateTime();
         if (reportFunction)
         {
-            reportFunction(ESPing::pingResult);
+            reportFunction(IPing::pingResult);
         }
     }
 }
@@ -115,12 +115,12 @@ void pingTimeout()
     {
         detachInterrupt(currentEchoPin);
     }
-    ESPing::itimer.end();
+    IPing::itimer.end();
     Serial.println(char(64+currentEchoPin));
     currentEchoPin = 0;
-    ESPing::pingResult = 0;
+    IPing::pingResult = 0;
     if (reportFunction)
     {
-        reportFunction(ESPing::pingResult);
+        reportFunction(IPing::pingResult);
     }
 }

@@ -19,17 +19,13 @@
  *
  */
 #include "telemetry.h"
+#include "counters.h"
 
 Telemetry::Telemetry(HardwareSerial port, unsigned speed) :
     rxCurrentPacket(NULL),
     rxState(RS_BEGIN),
     rxCurrentOffset(0),
     rxChecksum(0),
-    rxErrorChecksum(0),
-    rxErrorTooShort(0),
-    rxErrorTooLong(0),
-    rxErrorBuffer(0),
-    rxErrorDropped(0),
     txCurrentPacket(NULL),
     txTotalSize(0),
     txCurrentOffset(0),
@@ -91,7 +87,7 @@ void Telemetry::wheelEvent(rot_one left, rot_one right)
         }
     } else {
         // An earlier buffer was not sent yet, so it is updated.
-        txInfoWheelDrop++;
+        cnt.inc(txInfoWheelDrop);
         counterUpdate = true;
         p = rotationQueue.pop();
     }
@@ -118,7 +114,7 @@ void Telemetry::sonarEvent(packet *sonarPacket)
     {
         packet *p;
         // An earlier buffer was not sent yet, so it is updated.
-        txInfoSonarDrop++;
+        cnt.inc(txInfoSonarDrop);
         p = sonarQueue[sensor].pop();
         freePacket(p);
     }
@@ -265,7 +261,7 @@ bool Telemetry::rxGetBuffer()
         rxReInitPacket();
         return true;
     } else {
-        rxErrorBuffer++;
+        cnt.inc(rxErrorBuffer);
         counterUpdate = true;
         return false;
     }
@@ -277,7 +273,7 @@ void Telemetry::rxSaveByte(byte b)
     {
         rxCurrentPacket->raw[rxCurrentOffset++] = b;
     } else {
-        rxErrorTooLong++;
+        cnt.inc(rxErrorTooLong);
         counterUpdate = true;
         rxReInitPacket();
     }
@@ -304,26 +300,27 @@ bool Telemetry::rxEndOfPacketHandling()
     // Check basic packet validity
     if ((rxChecksum != 0xff))
     {
-        rxErrorChecksum++;
+        cnt.inc(rxErrorChecksum);
         counterUpdate = true;
         rxReInitPacket(); // recycle current rx buffer in place
         return false;
     }
     if (rxCurrentOffset <= sizeof(header))
     {
-        rxErrorTooShort++;
+        cnt.inc(rxErrorTooShort);
         counterUpdate = true;
         rxReInitPacket();
         return false;
     }
     if (rxCurrentOffset > (MAX_MSG_SIZE+1))
     {
-        rxErrorTooLong++;
+        cnt.inc(rxErrorTooLong);
         counterUpdate = true;
         rxReInitPacket();
         return false;
     }
     // Packet has passed basic validation tests and can now be acted on.
+    cnt.inc(rxPackets);
     packet *p = rxCurrentPacket;
     rxCurrentPacket = NULL;
     // Basic sanity check of incoming packet
@@ -373,7 +370,7 @@ bool Telemetry::rxEndOfPacketHandling()
             break;
 
         default:
-            rxErrorUnknown++;
+            cnt.inc(rxErrorUnknown);
             counterUpdate = true;
             break;
         }
@@ -408,6 +405,7 @@ void Telemetry::rxHandleUartByte(byte b)
             return;
         }
     }
+    cnt.inc(rxBytes);
     switch (rxState)
     {
     case RS_BEGIN:
@@ -418,7 +416,7 @@ void Telemetry::rxHandleUartByte(byte b)
             rxCalcChecksum(b);
             rxState = RS_DATA;
         } else {
-            rxErrorDropped++;
+            cnt.inc(rxErrorDropped);
             counterUpdate = true;
         }
         break;
@@ -585,7 +583,7 @@ packet* Telemetry::getEmptyPacket()
     {
         return freeList.pop();
     } else {
-        txErrorNoBuf++;
+        cnt.inc(txErrorNoBuf);
         counterUpdate = true;
     }
     return NULL;
