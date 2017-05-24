@@ -26,19 +26,16 @@
  */
 #pragma once
 #include "queuelist.h"
-// Packet framing (inspired by PPP)
-#define FRAME_START_STOP  0x7e
-#define FRAME_DATA_ESCAPE 0x7d
-#define FRAME_XOR         0x20
+// @def Packet framing (inspired by PPP)
+#define FRAME_START_STOP  0x7e //!< Start en end of frames
+#define FRAME_DATA_ESCAPE 0x7d //!< Escape special values
+#define FRAME_XOR         0x20 //!< Followed with XOR by this
 
-// @brief Defined addresses
-#define ADDR_RPI    0x01
-#define ADDR_TEENSY 0x02
-#define ADDR_ALL    0xff
+// @def Defined addresses
+#define ADDR_RPI    0x01 //!< External device
+#define ADDR_TEENSY 0x02 //!< Teensy controller
 
-/**
- * @brief Command opcodes
- */
+// @enum Command opcodes
 enum command
 {
     CMD_PING_QUERY    = 1,  //!< timestamp exchange
@@ -54,9 +51,8 @@ enum command
     CMD_SONAR_RETRY   = 11, //!< Do a repeat nextSonar() (for internal stall recovery)
 };
 
-/**
- * @brief General message header
- */
+
+//@struct General message header
 struct header
 {
     uint8_t dst;
@@ -65,9 +61,7 @@ struct header
     uint8_t reserved;
 } __attribute__((packed));
 
-/**
- * @brief Estimate transition time through exchange of timestamps.
- */
+// @struct Estimate transition time through exchange of timestamps.
 struct pingpong
 {
     struct header hdr;
@@ -75,11 +69,11 @@ struct pingpong
     uint32_t timestamp2;  //!< ping sets to 0 (pong sender fill this)
 } __attribute__((packed));
 
-// @brief Sonar sensor definitions
+// @var Sonar sensor definitions
 const unsigned MAX_NO_OF_SONAR = 6;
 
 /**
- * @brief Define polling sequence of sonars.
+ * @struct Define polling sequence of sonars.
  *
  * Same sonar id can be repeated up to 4 times.
  */
@@ -90,9 +84,7 @@ struct sequence
     uint8_t sequence[4*MAX_NO_OF_SONAR]; //!< Sonar id sequence
 } __attribute__((packed));
 
-/**
- * @brief Report distance from a single sonar.
- */
+// @struct Report distance from a single sonar.
 struct distance
 {
     struct header hdr;
@@ -102,16 +94,14 @@ struct distance
     uint32_t when;     // Time when data was measured
 } __attribute__((packed));
 
-/**
- * @brief Wheel sensor definitions
- */
+// @enum Wheel sensor definitions
 enum rotSide {
     ROT_LEFT,
     ROT_RIGHT
 };
 
 /**
- * @brief Rotation encoding
+ * @enum Rotation encoding
  *
  * The rotation enumeration represents the possible states when using
  * phase difference between two sensors.
@@ -125,7 +115,7 @@ enum rotDirection {
 };
 
 /**
- * @brief wheel description
+ * @struct wheel description
  *
  * One of these for left and right side.
  */
@@ -139,18 +129,14 @@ struct rot_one
     uint32_t dist_abs; //!< Absolute distance travelled
 } __attribute__((packed));
 
-/**
- * @brief Wheel status for both sides
- */
+// @struct Wheel status for both sides
 struct rotation
 {
     struct header hdr;     //!< header
     struct rot_one rot[2]; //!< Indexed with enumeration rotSide
 } __attribute__((packed));
 
-/**
- * @brief Error counter with name and value
- */
+// @struct Error counter with name and value
 struct errorcount
 {
     struct header hdr;
@@ -158,9 +144,7 @@ struct errorcount
     char name[24];   //!< ASCIIZ name
 } __attribute__((packed));
 
-/**
- * @brief This union is only for calculating max message size
- */
+// @union This union is only for calculating max message size
 union payload
 {
     struct pingpong pp;
@@ -172,9 +156,7 @@ union payload
 
 const size_t MAX_MSG_SIZE = sizeof(payload);
 
-/**
- * @brief General packet format for all defined messages
- */
+// @struct General packet format for all defined messages
 struct packet : node
 {
     union
