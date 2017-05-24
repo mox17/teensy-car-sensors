@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
 from collections import namedtuple
+from datetime import datetime
 import serial
 
 # Utility access functions 
@@ -21,7 +22,7 @@ def getStr(bytes):
             break
     return s
 
-# Protocol definition
+# helper function
 def enum(**enums):
     return type('Enum', (), enums)
 
@@ -208,6 +209,39 @@ def decodeByte(character):
         assert("Internal error")
     return
 
+def buildHeader(dst, src, cmd, buf=None):
+    if buf == None:
+        buf = []
+    buf.append(dst)
+    buf.append(src)
+    buf.append(cmd)
+    buf.append(0)
+    return buf
+    
+def add32(buf, value):
+    buf.append(value & 0xff)
+    value >>= 0xff
+    buf.append(value & 0xff)
+    value >>= 0xff
+    buf.append(value & 0xff)
+    value >>= 0xff
+    buf.append(value & 0xff)
+    return buf
+
+def add16(buf, value):
+    buf.append(value & 0xff)
+    value >>= 0xff
+    buf.append(value & 0xff)
+    return buf
+
+def sendPing(timestamp1):
+    buffer = buildHeader(ADDR_TEENSY, ADDR_RPI, Cmd.CMD_PING)
+    dt = datetime.now()
+    milliSecond = dt.microsecond / 1000
+    buffer = add32(buf, milliSecond) # timestamp1
+    buffer = add32(buf, 0)           # timestamp2
+    # Put buffer on tx queue
+    return
 
 def main():
     connected = False
