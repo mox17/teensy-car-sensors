@@ -27,16 +27,18 @@ def enum(**enums):
 
 # Protocol commands
 Cmd = enum(\
-    CMD_PING       = 1,  #// timestamp exchange
-    CMD_PONG       = 2,  #// timestamp exchange
-    CMD_US_SET_SEQ = 3,  #// up to 24 bytes. unused bytes are 0xff
-    CMD_US_STOP    = 4,  #// Stop Ultrasound sensors
-    CMD_US_START   = 5,  #// Start Ultrasound sensors
-    CMD_US_STATUS  = 6,  #// sensor id + distance
-    CMD_ROT_STATUS = 7,  #// direction, speed, odo
-    CMD_ROT_RESET  = 8,  #// Clear odometer
-    CMD_ERR_COUNT  = 9
-    )
+    CMD_PING_QUERY    = 1,  #// timestamp exchange
+    CMD_PONG_RESP     = 2,  #// timestamp exchange
+    CMD_SET_SONAR_SEQ = 3,  #// up to 24 bytes. unused bytes are 0xff
+    CMD_SONAR_STOP    = 4,  #// Stop Ultrasound sensors
+    CMD_SONAR_START   = 5,  #// Start Ultrasound sensors
+    CMD_SONAR_STATUS  = 6,  #// sensor id + distance
+    CMD_WHEEL_STATUS  = 7,  #// direction, speed, odo
+    CMD_WHEEL_RESET   = 8,  #// Clear odometer
+    CMD_ERROR_COUNT   = 9,  #// Error counter name and value
+    CMD_GET_COUNTERS  = 10, #// Ask teensy to send all non-zero counters
+    CMD_SONAR_RETRY   = 11, #// Do a repeat nextSonar() (for internal stall recovery)
+    )       
 
 # Packet framing bytes
 FRAME_START_STOP  = 0x7e
@@ -67,13 +69,13 @@ def getPingPong(frm):
     pp = pingpong(get32(frm), get32(frm[4:]))
     return pp
 
-def getUsStatus(frm):
+def getSonarStatus(frm):
     """
     struct distance
     {
         struct header hdr;
-        uint8_t sensor;       // 0 .. MAX_NO_OF_SONAR-1
-        uint8_t filler;       // Alignment
+        uint8_t sensor;    // 0 .. MAX_NO_OF_SONAR-1
+        uint8_t filler;    // Alignment
         uint16_t distance; // Measurements in microseconds
         uint32_t when;     // Time when data was measured
     } __attribute__((packed));
@@ -114,30 +116,30 @@ def decodeFrame(frm):
         return
     hdr = header(frm[0], frm[1], frm[2], frm[3])
     #print(hdr)
-    frm = frm[4:]  # remove header
-    if hdr.cmd == Cmd.CMD_PING :
+    frm = frm[4:]  # remove header and checksum
+    if hdr.cmd == Cmd.CMD_PING_QUERY :
         pp = getPingPong(frm)
         print("PING", pp)
-    elif hdr.cmd == Cmd.CMD_PONG:
+    elif hdr.cmd == Cmd.CMD_PONG_RESP:
         pp = getPingPong(frm)
         print("PONG", pp)
-    elif hdr.cmd == Cmd.CMD_US_SET_SEQ:
+    elif hdr.cmd == Cmd.CMD_SET_SONAR_SEQ:
         pass
-    elif hdr.cmd == Cmd.CMD_US_STOP:
+    elif hdr.cmd == Cmd.CMD_SONAR_STOP:
         pass
-    elif hdr.cmd == Cmd.CMD_US_START:
+    elif hdr.cmd == Cmd.CMD_SONAR_START:
         pass
-    elif hdr.cmd == Cmd.CMD_US_STATUS:
-        dist = getUsStatus(frm)
+    elif hdr.cmd == Cmd.CMD_SONAR_STATUS:
+        dist = getSonarStatus(frm)
         print(dist)
-    elif hdr.cmd == Cmd.CMD_ROT_STATUS:
+    elif hdr.cmd == Cmd.CMD_WHEEL_STATUS:
         left  = getRotation(frm)
         right = getRotation(frm[16:])
         print("Rotation", left, right)
         pass
-    elif hdr.cmd == Cmd.CMD_ROT_RESET:
+    elif hdr.cmd == Cmd.CMD_WHEEL_RESET:
         pass
-    elif hdr.cmd == Cmd.CMD_ERR_COUNT:
+    elif hdr.cmd == Cmd.CMD_ERROR_COUNT:
         err = getErrorCount(frm)
         print(err)
         
@@ -169,6 +171,8 @@ def handleFrame():
     global rawData
     if (len(rawData) > 0):
         #print(len(rawData), rawData)
+        if checksum != 0xff:
+            print("checksum error:", checksum)
         decodeFrame(rawData)
     return
 
@@ -185,10 +189,12 @@ def decodeByte(character):
         if b == FRAME_START_STOP:
             rxState = rxStateData
             newFrame()
+            checksumCalc(b)
     elif rxState == rxStateData:
         if b == FRAME_START_STOP:
             handleFrame()
             newFrame()
+            checksumCalc(b)
             return
         elif b == FRAME_DATA_ESCAPE:
             escapeFlag = True
