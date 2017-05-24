@@ -36,10 +36,6 @@ SonarArray* SonarArray::getInstance()
 
 bool SonarArray::startSonar()
 {
-    if (m_current >= m_seqLen)
-    {
-        m_current = 0;
-    }
     sensorId = m_sequence[m_current];
     SonarArray::m_currentSensor = m_sensorArray[sensorId];
     if (SonarArray::m_currentSensor->pingAsync(sonarReport))
@@ -63,6 +59,10 @@ bool SonarArray::nextSonar()
     if (m_state != SONAR_STOPPED)
     {
         ++m_current;
+        if (m_current >= m_seqLen)
+        {
+            m_current = 0;
+        }
         return startSonar();
     }
     return true;
@@ -73,11 +73,20 @@ void SonarArray::stopSonar()
     m_state = SONAR_STOPPED;
 }
 
+/**
+ * @brief Set a new polling sequence for sonar array
+ *
+ * Do sanity checks for sequence length and sonar indices.
+ */
 void SonarArray::setSequence(byte length, byte seq[])
 {
     if ((length > 0) && (length <= 4*MAX_PINS))
     {
         m_seqLen = min(length,4*MAX_PINS);
+        if (m_current > m_seqLen)
+        {
+            m_current = 0;
+        }
         for (int i=0; i<m_seqLen; i++)
         {
             if (seq[i] < MAX_PINS)
