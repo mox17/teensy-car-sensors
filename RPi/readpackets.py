@@ -21,16 +21,17 @@ def locate(user_string, x=0, y=0):
 
 def prettyPrintDist(dist):
     sensor = dist.sensor
-    locate(' {:10d}cm'.format(dist.distance), 14*sensor, 1)
-    locate("",0,8)
+    locate(' {:10d} cm'.format(dist.distance), 15*sensor, 1)
+    locate(' {:10} ms'.format(dist.when), 1, 8)
+    locate("",0,9)
     return
 
 def prettyPrintWheels(left, right):
-    locate(' {:10d} pulses {:10d} pulses'.format(left.dist, right.dist), 1, 3)
-    locate(' {:10}         {:10}'.format(left.speed,     right.speed), 1, 4)
-    locate(' {:10}         {:10}'.format(left.direction, right.direction), 1, 5)
-    locate(' {:10}         {:10}'.format(left.turn,      right.turn), 1, 6)
-    locate("",0,8)
+    locate(' {:10d} pulses  {:10d} pulses'.format(left.dist, right.dist), 1, 3)
+    locate(' {:10} p/s     {:10} p/s'.format(left.speed,     right.speed), 1, 4)
+    locate(' {:10} dir     {:10} dir'.format(left.direction, right.direction), 1, 5)
+    locate(' {:10} turn    {:10} turn'.format(left.turn,      right.turn), 1, 6)
+    locate("",0,9)
     return
 
 # Utility access functions 
