@@ -2,9 +2,9 @@
 
 queuelist::queuelist()
 {
-    size = 0;       // set the size of queue to zero.
-    head = NULL;    // set the head of the list to point nowhere.
-    tail = NULL;    // set the tail of the list to point nowhere.
+    size = 0;
+    head = NULL;
+    tail = NULL;
 }
 
 void queuelist::push(node* n)

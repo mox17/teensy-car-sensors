@@ -34,33 +34,38 @@ SonarArray* SonarArray::getInstance()
     return m_instance;
 }
 
-void SonarArray::startSonar()
+bool SonarArray::startSonar()
 {
-    if (m_seqLen > 0)
+    if (m_current >= m_seqLen)
     {
-        if (m_current >= m_seqLen)
-        {
-            m_current = 0;
-        }
-        sensorId = m_sequence[m_current];
-        SonarArray::m_currentSensor = m_sensorArray[sensorId];
-        if (SonarArray::m_currentSensor->pingAsync(sonarReport))
-        {
-            m_state = SONAR_PING_SENT;
-        } else {
-            cnt.inc(pingFail);
-            m_state = SONAR_PING_ERROR;
-        }
+        m_current = 0;
     }
+    sensorId = m_sequence[m_current];
+    SonarArray::m_currentSensor = m_sensorArray[sensorId];
+    if (SonarArray::m_currentSensor->pingAsync(sonarReport))
+    {
+        m_state = SONAR_PING_SENT;
+    } else {
+        cnt.inc(pingFail);
+        m_state = SONAR_PING_ERROR;
+        return false;
+    }
+    return true;
 }
 
-void SonarArray::nextSonar()
+/**
+ * @brief Start the next sonar
+ *
+ * @return false if sonar failed, true if success or stopped
+ */
+bool SonarArray::nextSonar()
 {
     if (m_state != SONAR_STOPPED)
     {
         ++m_current;
-        startSonar();
+        return startSonar();
     }
+    return true;
 }
 
 void SonarArray::stopSonar()
@@ -70,10 +75,20 @@ void SonarArray::stopSonar()
 
 void SonarArray::setSequence(byte length, byte seq[])
 {
-    m_seqLen = min(length,4*MAX_PINS);
-    for (int i=0; i<m_seqLen; i++)
+    if ((length > 0) && (length <= 4*MAX_PINS))
     {
-        m_sequence[i] = seq[i];
+        m_seqLen = min(length,4*MAX_PINS);
+        for (int i=0; i<m_seqLen; i++)
+        {
+            if (seq[i] < MAX_PINS)
+            {
+                m_sequence[i] = seq[i];
+            } else {
+                cnt.inc(badSonarIdx);
+            }
+        }
+    } else {
+        cnt.inc(badSeqLen);
     }
 }
 
@@ -89,6 +104,8 @@ SonarArray::sonarState SonarArray::getState()
 
 /**
  * @brief callback from ping ISR handler
+ *
+ * Invoke function pointer to custom handler.
  */
 void sonarReport(unsigned long microsec)
 {

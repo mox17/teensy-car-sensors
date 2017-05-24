@@ -181,6 +181,9 @@ size_t Telemetry::getPacketLength(packet *p)
 
     case CMD_SONAR_STOP:
     case CMD_SONAR_START:
+    case CMD_WHEEL_RESET:
+    case CMD_SONAR_RETRY:
+    case CMD_GET_COUNTERS:
         return sizeof(header);
 
     case CMD_SONAR_STATUS:
@@ -189,15 +192,9 @@ size_t Telemetry::getPacketLength(packet *p)
     case CMD_WHEEL_STATUS:
         return sizeof(rotation);
 
-    case CMD_WHEEL_RESET:
-        return sizeof(header);
-
     case CMD_ERROR_COUNT:
         len = strlen(p->ec.name);
         return (sizeof(header)+sizeof(p->ec.count)+len+1);
-
-    case CMD_GET_COUNTERS:
-        return sizeof(header);
     }
     return 0;
 }

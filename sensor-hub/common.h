@@ -35,7 +35,9 @@
 #define ADDR_TEENSY 0x02
 #define ADDR_ALL    0xff
 
-// Command opcodes
+/**
+ * @brief Command opcodes
+ */
 enum command
 {
     CMD_PING_QUERY    = 1,  // timestamp exchange
@@ -48,6 +50,7 @@ enum command
     CMD_WHEEL_RESET   = 8,  // Clear odometer
     CMD_ERROR_COUNT   = 9,  // Error counter name and value
     CMD_GET_COUNTERS  = 10, // Ask teensy to send all non-zero counters
+    CMD_SONAR_RETRY   = 11, // Do a repeat nextSonar() (for internal stall recovery)
 };
 
 struct header
@@ -58,8 +61,8 @@ struct header
     uint8_t reserved;
 } __attribute__((packed));
 
-/*
- * Estimate transition time through exchange of timestamps.
+/**
+ * @brief Estimate transition time through exchange of timestamps.
  */
 struct pingpong
 {
@@ -82,8 +85,8 @@ struct sequence
     uint8_t sequence[4*MAX_NO_OF_SONAR];
 } __attribute__((packed));
 
-/*
- * Report distance from a single sonar.
+/**
+ * @brief Report distance from a single sonar.
  */
 struct distance
 {

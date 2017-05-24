@@ -144,13 +144,22 @@ void handleMessageQueue()
                 sonarTiming[id] = p->ds.when;
                 sonarCounts[id]++;
                 sonarUpdate++;
-                // Put message on TX queue
+                // Put message on UART TX queue
                 messageHandling.sonarEvent(p);
                 p = NULL;
             } else {
                 cnt.inc(badSonarId);
             }
-            sonarArray.nextSonar();
+            if (!sonarArray.nextSonar())
+            {
+                // Schedule a retry
+                packet *retry = messageHandling.getEmptyPacket();
+                retry->hdr.dst = ADDR_TEENSY;
+                retry->hdr.src = ADDR_TEENSY;
+                retry->hdr.cmd = CMD_SONAR_RETRY;
+                retry->hdr.reserved = 0;
+                messageHandling.putMainLoopPacket(retry);
+            }
             break;
 
         case CMD_WHEEL_RESET:
@@ -160,6 +169,15 @@ void handleMessageQueue()
 
         case CMD_GET_COUNTERS:
             cnt.sendNZ();
+            break;
+
+        case CMD_SONAR_RETRY:
+            // Try starting the sonars again...
+            if (!sonarArray.nextSonar())
+            {
+                messageHandling.putMainLoopPacket(p);
+                p = NULL;
+            }
             break;
 
         default:

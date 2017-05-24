@@ -16,11 +16,11 @@ public:
         SONAR_PING_ERROR // Error when initiating ping
     };
     SonarArray(int noOfPins, const int* pins, int maxDistance, void(*report)(int id, int value, unsigned long time_in_ms));
-    void startSonar();
+    bool startSonar();
     void stopSonar();
     bool sonarRunning();
     void setSequence(byte length, byte seq[]);
-    void nextSonar();
+    bool nextSonar();
 
     static IPing* m_currentSensor;
     static void(*m_report)(int id, int value, unsigned long time_in_ms);
