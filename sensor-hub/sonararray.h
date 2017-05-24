@@ -10,10 +10,10 @@ class SonarArray {
 
 public:
     enum sonarState {
-        SONAR_STOPPED,   // No pinging
-        SONAR_IDLE,      // Waiting to ping (timer running)
-        SONAR_PING_SENT, // Waiting for echo
-        SONAR_PING_ERROR // Error when initiating ping
+        SONAR_STOPPED,   //!< No pinging
+        SONAR_IDLE,      //!< Waiting to ping (timer running)
+        SONAR_PING_SENT, //!< Waiting for echo
+        SONAR_PING_ERROR //!< Error when initiating ping
     };
     SonarArray(int noOfPins, const int* pins, int maxDistance, void(*report)(int id, int value, unsigned long time_in_ms));
     bool startSonar();
@@ -33,9 +33,9 @@ private:
     int m_pins[MAX_PINS];
     IPing *m_sensorArray[MAX_PINS];
     int m_maxDistance;
-    int m_sequence[4*MAX_PINS];  // a sequence of up to 24
-    int m_seqLen;   // Length of current sequence
-    volatile int m_current;  // index into sequence
+    int m_sequence[4*MAX_PINS];  //!< a sequence of up to 24
+    int m_seqLen;                //!< Length of current sequence
+    volatile int m_current;      //!< index into sequence
     sonarState m_state=SONAR_STOPPED;
     static SonarArray *m_instance; // This class is a singleton
 };

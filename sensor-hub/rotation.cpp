@@ -22,6 +22,13 @@ inline rotDirection calcDirection(byte oldVal, byte newVal)
     return states[oldVal][newVal];
 }
 
+/**
+ * @brief Circular buffer used to collect rotation events.
+ *
+ * There may be a lot of rotation events. Each wheel generates 20 interrupts
+ * per revolution. To avoid data loss if main program is busy, there is
+ * this intermediate buffer for wheel events.
+  */
 class CircularBuffer
 {
 public:
@@ -32,6 +39,9 @@ public:
     {
     }
 
+    /**
+     * @brief Reset the circular buffer
+     */
     void resetBuffer()
     {
         noInterrupts();
@@ -41,6 +51,12 @@ public:
         interrupts();
     }
 
+    /*
+     * @brief Add data to buffer
+     * @param time The time in milliseconds
+     * @param count The total number of pulses so far
+     * @param dir The direction of rotation
+     */
     bool push(uint32_t time, uint32_t count, rotDirection dir)
     {
         uint8_t next_head = (ring_head + 1) % BUFSIZE;
@@ -60,6 +76,9 @@ public:
         }
     }
 
+    /**
+     * @brief Get rotation event from buffer
+     */
     bool pop(struct rotEvent &event)
     {
         if (ring_head != ring_tail)
@@ -72,6 +91,9 @@ public:
         }
     }
 
+    /**
+     * @brief Get the number of buffer overflows (and reset count)
+     */
     uint32_t getOverflow()
     {
         uint32_t c = m_overflowCount;
@@ -80,10 +102,10 @@ public:
     }
 
 private:
-    volatile byte ring_head;
-    volatile byte ring_tail;
-    volatile uint32_t m_overflowCount;
-    rotEvent m_buffer[BUFSIZE];
+    volatile byte ring_head; //!< newest item index
+    volatile byte ring_tail; //!< oldest item index
+    volatile uint32_t m_overflowCount; //!< overflows so far
+    rotEvent m_buffer[BUFSIZE]; //!< The actual buffer
 };
 
 class WheelSensor
@@ -107,7 +129,6 @@ public:
      * {
      *     global->isrHelper(ROT_SENSOR_TWO);
      * }
-     *
      */
     WheelSensor() :
         m_pinsState(0),
@@ -121,6 +142,10 @@ public:
      *
      * This allows static allocation of WheelSensor object, while still
      * controlling when interrupts starts flowing in.
+     * @param pin1 1st sensor pin
+     * @param pin2 2nd sensor pin
+     * @param isr1 1st ISR routine
+     * @param isr2 2nd ISR routine
      */
     void activate(int pin1, int pin2, void (*isr1)(void), void (*isr2)(void))
     {
@@ -133,6 +158,7 @@ public:
     }
     /**
      * @brief This function is called from ISR handler.
+     * @param sensor The sensor id (ROT_SENSOR_ONE or ROT_SENSOR_TWO)
      */
     void isrHelper(sensorNo sensor)
     {
@@ -163,21 +189,22 @@ public:
     }
 
 private:
-    byte m_inputPins[2];
-    byte m_pinsState;
-    volatile uint32_t m_rotCount;
-    volatile rotDirection m_direction;
-    CircularBuffer m_buf;
+    byte m_inputPins[2]; //!< Input pins for this side
+    byte m_pinsState;    //!< Combined state (to calculate direction)
+    volatile uint32_t m_rotCount; //!< Total number of interrupts
+    volatile rotDirection m_direction; //<! Which way are we rolling
+    CircularBuffer m_buf;  //!< Intermediate buffer for events
 };
 
-WheelSensor leftWheel;
-WheelSensor rightWheel;
+WheelSensor leftWheel; //!< Left wheel sensor object
+WheelSensor rightWheel; //!< Right wheel sensor object
 
 /*
  * @brief Rotation calculation class
  *
  * This class encapsulated the collection of data from interrupt driven buffers
  * and calculation (averaging) of speed over a number of samples.
+ * @param side Left or right side
  */
 RotCalc::RotCalc(rotSide side) :
     m_wHead(avgCount-1),
@@ -253,6 +280,10 @@ bool RotCalc::handleBuffer()
     return newData;
 }
 
+/**
+ * @brief Calculate speed in pulses per second
+ * @return speed pulses/sec
+ */
 uint16_t RotCalc::pulsePerSec()
 {
     if (m_deltaPulse && m_deltaMillis)
@@ -265,17 +296,29 @@ uint16_t RotCalc::pulsePerSec()
     }
 }
 
+/**
+ * @brief Get travelled distance (in pulses, 20 per revolution)
+ * @return distance
+ */
 uint32_t RotCalc::odometer()
 {
     handleBuffer();
     return m_odometer;
 }
 
+/**
+ * @brief get direction
+ * @return direction
+ */
 rotDirection RotCalc::direction()
 {
     return m_direction;
 }
 
+/**
+ * @brief Check is new data has arrived
+ * @return new data status
+ */
 bool RotCalc::newData()
 {
     bool ret = m_newData;
@@ -285,6 +328,7 @@ bool RotCalc::newData()
 
 /**
  * @brief Get rotation record.
+ * @param rec return parameter
  */
 void RotCalc::rotGetRec(rot_one &rec)
 {
@@ -296,6 +340,9 @@ void RotCalc::rotGetRec(rot_one &rec)
     rec.dist_abs = m_odometer;
 }
 
+/**
+ * @brief Reset the odometer for this side
+ */
 void RotCalc::resetOdometer()
 {
     m_odoDirChg = 0;
@@ -311,21 +358,25 @@ void RotCalc::resetOdometer()
     }
 }
 
+//!< @brief ISR
 void isrLeftOne()
 {
     leftWheel.isrHelper(ROT_SENSOR_ONE);
 }
 
+//!< @brief ISR
 void isrLeftTwo()
 {
     leftWheel.isrHelper(ROT_SENSOR_TWO);
 }
 
+//!< @brief ISR
 void isrRightOne()
 {
     rightWheel.isrHelper(ROT_SENSOR_ONE);
 }
 
+//!< @brief ISR
 void isrRightTwo()
 {
     rightWheel.isrHelper(ROT_SENSOR_TWO);
@@ -333,6 +384,10 @@ void isrRightTwo()
 
 /**
  * @brief Set up main rotation sensor objects.
+ * @param left1 1st sensor left
+ * @param left2 2nd sensor left
+ * @param right1 1st sensor right
+ * @param right2 2nd sensor right
  */
 void Rotation(uint8_t left1, uint8_t left2, uint8_t right1, uint8_t right2)
 {

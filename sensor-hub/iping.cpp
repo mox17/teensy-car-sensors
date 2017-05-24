@@ -6,9 +6,17 @@ unsigned int IPing::m_maxEchoTime;
 unsigned long IPing::m_maxTime;
 unsigned long IPing::pingResult;
 
+/**
+ * @brief constructor
+ *
+ * @param trigPin the input pin to trigger the sonar
+ * @param echoPin the output pin where a times pulse indicates cdistane.
+ * This may be the same as trigPin.
+ * @param maxDistCm The maximum distance that will be reported.
+ */
 IPing::IPing(uint8_t trigPin, uint8_t echoPin, int maxDistCm)
 {
-    m_trigBit = digitalPinToBitMask(trigPin); // Get the port register bitmask for the trigger pin.
+    m_trigBit = digitalPinToBitMask(trigPin);  // Get the port register bitmask for the trigger pin.
     m_echoBit = digitalPinToBitMask(echoPin);  // Get the port register bitmask for the echo pin.
     m_trigOut = portOutputRegister(digitalPinToPort(trigPin)); // Get the output port register for the trigger pin.
     m_echoIn = portInputRegister(digitalPinToPort(echoPin));   // Get the input port register for the echo pin.
@@ -24,8 +32,12 @@ void isrEcho();
 void pingTimeout();
 byte currentEchoPin=0;
 
-/*
+/**
  * @brief Send trigger signal to sonar
+ *
+ * If the sonar module does not respond with a positive pulse
+ * within time, this will return false
+ * @return Success of initiating a ping
  */
 boolean IPing::pingTrigger()
 {
@@ -41,17 +53,18 @@ boolean IPing::pingTrigger()
     while ((*m_echoIn & m_echoBit) && (micros() <= m_maxTime))
     { // Wait for echo pin to clear.
     }
-    digitalWrite(13,true);
+    digitalWrite(13,true);  // Make time spent here visible on a scope
     while (!(*m_echoIn & m_echoBit))
     {
         // Wait for ping to start.
+        // TODO: this could be interrupt driven
         if (micros() > m_maxTime)
         {
-            digitalWrite(13,false);
+            digitalWrite(13,false); // Make time spent here visible on a scope
             return false;
         }
     }
-    digitalWrite(13,false);
+    digitalWrite(13,false); // Make time spent here visible on a scope
     m_maxTime = micros() + m_maxEchoTime;
     timerMicroS(m_maxTime, pingTimeout);
     // Use interrupt to determine echo time
@@ -62,6 +75,11 @@ boolean IPing::pingTrigger()
 
 void (*reportFunction)(unsigned long);
 
+/**
+ * @brief Start an asynchronous ping
+ *
+ * @param report The callback where the result will be delivered.
+ */
 bool IPing::pingAsync(void (*report)(unsigned long))
 {
     reportFunction = report; // Callback (interrupt context)
@@ -71,6 +89,12 @@ bool IPing::pingAsync(void (*report)(unsigned long))
 
 void (*itimerCallback)();
 
+/**
+ * @brief Micro second repeating timer
+ *
+ * @param microseconds Desired delay.
+ * @param userFunc Callback function for timeout handling.
+ */
 void IPing::timerMicroS(unsigned int microseconds, void (*userFunc)(void))
 {
     itimer.end();
@@ -78,11 +102,17 @@ void IPing::timerMicroS(unsigned int microseconds, void (*userFunc)(void))
     itimer.begin(itimerCallback, microseconds);
 }
 
+/**
+ * @brief Stop running timer
+ */
 void IPing::timerStop()
 {
     itimer.end();
 }
 
+/**
+ * @brief Calculate duration from ping to echo
+ */
 void IPing::calculateTime()
 {
     pingResult = (micros() - (m_maxTime - m_maxEchoTime) - 13);
@@ -96,9 +126,7 @@ void isrEcho()
     if (currentEchoPin)
     {
         IPing::timerStop();
-        IPing::calculateTime();
         detachInterrupt(currentEchoPin);
-        //Serial.println(char(97+currentEchoPin));
         currentEchoPin = 0;
         IPing::calculateTime();
         if (reportFunction)
@@ -119,7 +147,6 @@ void pingTimeout()
         detachInterrupt(currentEchoPin);
     }
     IPing::itimer.end();
-    //Serial.println(char(64+currentEchoPin));
     currentEchoPin = 0;
     IPing::pingResult = 0;
     if (reportFunction)

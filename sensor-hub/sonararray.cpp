@@ -14,6 +14,12 @@ int sensorId;                                                             // ID 
 SonarArray * SonarArray::m_instance;                                      // Getting the instance from interrupt
 IntervalTimer sonarInterval;
 
+/*
+ * @param noOfPins How many sonar sensors
+ * @param Array of input pins
+ * @param maxDistance Maximum distance to measure
+ * @param report Callback function to deliver results
+ */
 SonarArray::SonarArray(int noOfPins, const int* pins, int maxDistance, void(*report)(int id, int value, unsigned long time_in_ms))
 {
     m_maxDistance = maxDistance;
@@ -34,6 +40,9 @@ SonarArray* SonarArray::getInstance()
     return m_instance;
 }
 
+/**
+ * @brief Start a sonar measurement, using the next sonar in the sequence.
+ */
 bool SonarArray::startSonar()
 {
     sensorId = m_sequence[m_current];
@@ -77,6 +86,8 @@ void SonarArray::stopSonar()
  * @brief Set a new polling sequence for sonar array
  *
  * Do sanity checks for sequence length and sonar indices.
+ * @param length Number of entries in sequence
+ * @param seq The byte sequence
  */
 void SonarArray::setSequence(byte length, byte seq[])
 {
@@ -101,11 +112,18 @@ void SonarArray::setSequence(byte length, byte seq[])
     }
 }
 
+/**
+ * @brief Status of sonar measurements
+ * @return running or not
+ */
 bool SonarArray::sonarRunning()
 {
     return (m_state == SONAR_IDLE || m_state == SONAR_PING_SENT);
 }
 
+/**
+ * @return sonar internal state
+ */
 SonarArray::sonarState SonarArray::getState()
 {
     return m_state;

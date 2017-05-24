@@ -21,19 +21,19 @@ public:
 
 private:
     enum receiveStates {
-        RS_BEGIN,  // Waiting for framing 0x7e
-        RS_DATA,   // Incoming data
-        RS_ESCAPE, // Received 0x7d - XOR next byte with 0x20
+        RS_BEGIN,  //!< Waiting for framing 0x7e
+        RS_DATA,   //!< Incoming data
+        RS_ESCAPE, //!< Received 0x7d - XOR next byte with 0x20
     };
 
     enum transmitStates {
-        TS_BEGIN,  // Nothing sent yet, deliver 0x7e
-        TS_DATA,   // Sending normal data
-        TS_ESCAPE, // Escape has been sent, escByte is next
-        TS_CHKSUM, // Last data byte sent, checksum is next
-        TS_CHECKSUM_ESC, // checksum needs escaping
-        TS_END,    // Checksum sent, frame is next. Can be skipped if there is a next packet in queue
-        TS_IDLE,   // No data to transmit.
+        TS_BEGIN,  //!< Nothing sent yet, deliver 0x7e
+        TS_DATA,   //!< Sending normal data
+        TS_ESCAPE, //!< Escape has been sent, escByte is next
+        TS_CHKSUM, //!< Last data byte sent, checksum is next
+        TS_CHECKSUM_ESC, //!< checksum needs escaping
+        TS_END,    //!< Checksum sent, frame is next. Can be skipped if there is a next packet in queue
+        TS_IDLE,   //!< No data to transmit.
     };
 
     HardwareSerial serialPort;
@@ -47,20 +47,20 @@ private:
     queuelist mainLoop;
 
     // RX data housekeeping
-    packet *rxCurrentPacket;  // Packet being received
-    receiveStates rxState;    // state of packet reception
-    uint16_t rxCurrentOffset; // Bytes received so far
-    uint16_t rxChecksum;      // Checksum so far
+    packet *rxCurrentPacket;  //!< Packet being received
+    receiveStates rxState;    //!< state of packet reception
+    uint16_t rxCurrentOffset; //!< Bytes received so far
+    uint16_t rxChecksum;      //!< Checksum so far
     // Error counters
     bool counterUpdate;
 
     // TX data housekeeping
-    packet *txCurrentPacket;  // The currently transmitting packet
-    uint16_t txTotalSize;     // Total number of bytes (payload - note escaped) in bufefr
-    uint16_t txCurrentOffset; // Current offset for transmission
-    transmitStates txState;   // State for packet transmission
-    byte txEscByte;           // stuffed byte, i.e. value xor'ed with 0x20 to transmit.
-    uint16_t txChecksum;      // TX checksum
+    packet *txCurrentPacket;  //!< The currently transmitting packet
+    uint16_t txTotalSize;     //!< Total number of bytes (payload - note escaped) in bufefr
+    uint16_t txCurrentOffset; //!< Current offset for transmission
+    transmitStates txState;   //!< State for packet transmission
+    byte txEscByte;           //!< stuffed byte, i.e. value xor'ed with 0x20 to transmit.
+    uint16_t txChecksum;      //!< TX checksum
 
     // Protocol housekeeping
     bool *pingReady;

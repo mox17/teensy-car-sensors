@@ -31,12 +31,12 @@ public:
     static IntervalTimer itimer;
 private:
     boolean pingTrigger();
-    uint8_t m_trigBit;
-    uint8_t m_echoBit;
+    uint8_t m_trigBit;  //!< bitmask for trigger I/O
+    uint8_t m_echoBit;  //!< bitmask for echo I/O
     volatile uint8_t *m_trigOut;
     volatile uint8_t *m_trigMode;
     volatile uint8_t *m_echoIn;
     static unsigned int m_maxEchoTime;
     static unsigned long m_maxTime;
-	uint8_t m_echoPin;
+	uint8_t m_echoPin;  //!< Used for setting and removing interrupt handling
 };

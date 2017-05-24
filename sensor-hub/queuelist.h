@@ -1,8 +1,11 @@
 #pragma once
 #include <Arduino.h>
 
+/**
+ * @brief A queue using a simple linked list
+ */
 typedef struct node {
-    node * next; // the next node in the list.
+    node * next; //!< the next node in the queue.
 } node;
 
 class queuelist
@@ -15,7 +18,7 @@ class queuelist
     int count() const;
 
   private:
-    unsigned size;
-    node* head;
-    node* tail;
+    unsigned size; //!< items in queue
+    node* head;    //!< oldest item in queue
+    node* tail;    //!< newest item in queue
 };

@@ -2,7 +2,9 @@
  * @brief Error counter encapsulation
  *
  * Define counters in the MACRO below.
- *
+ * Through a bit of macro magic, a single line is all it takes to declare
+ * a new counter.
+ * The name and value can be sent to remote side.
  */
 #pragma once
 #include <Arduino.h>
