@@ -107,7 +107,7 @@ def getErrorCount(frm):
         char name[24];   // ASCIIZ name
     } __attribute__((packed));
     """
-    err = errorcount(get32(frm), getStr(frm[4:-1]))
+    err = errorcount(get32(frm), getStr(frm[4:]))
     return err
 
 def decodeFrame(frm):
@@ -172,8 +172,9 @@ def handleFrame():
     if (len(rawData) > 0):
         #print(len(rawData), rawData)
         if checksum != 0xff:
-            print("checksum error:", checksum)
-        decodeFrame(rawData)
+            print("checksum error:", checksum, "\nerror data:", len(rawData), rawData)
+        else:
+            decodeFrame(rawData[:-1])
     return
 
 def newFrame():
@@ -189,22 +190,19 @@ def decodeByte(character):
         if b == FRAME_START_STOP:
             rxState = rxStateData
             newFrame()
-            checksumCalc(b)
     elif rxState == rxStateData:
         if b == FRAME_START_STOP:
             handleFrame()
             newFrame()
-            checksumCalc(b)
             return
         elif b == FRAME_DATA_ESCAPE:
             escapeFlag = True
-            checksumCalc(b)
             return
         else:
-            checksumCalc(b)
             if escapeFlag == True:
                 escapeFlag = False
                 b = b ^ FRAME_XOR
+            checksumCalc(b)
             rawData.append(b)
     else:
         assert("Internal error")
