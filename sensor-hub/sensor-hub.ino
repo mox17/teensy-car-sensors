@@ -114,12 +114,12 @@ void handleMessageQueue()
     {
         switch ((command)p->hdr.cmd)
         {
-        case CMD_PONG:
+        case CMD_PONG_RESP:
             Serial.print("PONG received, delay=");
             Serial.println(millis() - p->pp.timestamp1);
             break;
 
-        case CMD_US_SET_SEQ:
+        case CMD_SET_SONAR_SEQ:
             if (p->sq.len <= 4*MAX_NO_OF_SONAR)
             {
                 sonarArray.setSequence(p->sq.len, p->sq.sequence);
@@ -128,15 +128,15 @@ void handleMessageQueue()
             }
             break;
 
-        case CMD_US_STOP:
+        case CMD_SONAR_STOP:
             sonarArray.stopSonar();
             break;
 
-        case CMD_US_START:
+        case CMD_SONAR_START:
             sonarArray.startSonar();
             break;
 
-        case CMD_US_STATUS:
+        case CMD_SONAR_STATUS:
             id = p->ds.sensor;
             if (id < MAX_NO_OF_SONAR)
             {
@@ -153,9 +153,13 @@ void handleMessageQueue()
             sonarArray.nextSonar();
             break;
 
-        case CMD_ROT_RESET:
+        case CMD_WHEEL_RESET:
             rotLeft.resetOdometer();
             rotRight.resetOdometer();
+            break;
+
+        case CMD_GET_COUNTERS:
+            cnt.sendNZ();
             break;
 
         default:
@@ -203,7 +207,7 @@ void mainSonarReport(int id, int value, unsigned long time_in_ms)
     {
         p->ds.hdr.dst = ADDR_TEENSY;
         p->ds.hdr.src = ADDR_TEENSY;
-        p->ds.hdr.cmd = CMD_US_STATUS;
+        p->ds.hdr.cmd = CMD_SONAR_STATUS;
         p->ds.hdr.reserved = 0;
         p->ds.sensor = id;
         p->ds.distance = value;

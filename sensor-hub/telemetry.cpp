@@ -39,37 +39,6 @@ Telemetry::Telemetry(HardwareSerial port, unsigned speed) :
 }
 
 /**
- * @brief Print error counters to selected serial port.
- *
- * Only update if values changed.
- */
-void Telemetry::printErrorCounters(HardwareSerial out)
-{
-    if (counterUpdate)
-    {
-        out.print( "\nrxErrorChecksum :");
-        out.println(rxErrorChecksum);
-        out.print( "rxErrorTooShort :");
-        out.println(rxErrorTooShort);
-        out.print( "rxErrorTooLong  :");
-        out.println(rxErrorTooLong);
-        out.print( "rxErrorBuffer   :");
-        out.println(rxErrorBuffer);
-        out.print( "rxErrorDropped  :");
-        out.println(rxErrorDropped);
-        out.print( "rxErrorUnknown  :");
-        out.println(rxErrorUnknown);
-        out.print( "txErrorNoBuf    :");
-        out.println(txErrorNoBuf);
-        out.print( "txInfoSonarDrop :");
-        out.println(txInfoSonarDrop);
-        out.print( "txInfoWheelDrop :");
-        out.println(txInfoWheelDrop);
-        counterUpdate = false;
-    }
-}
-
-/**
  * @brief Send wheel event to RPi.
  *
  * Replace any pending event already in queue.
@@ -94,7 +63,7 @@ void Telemetry::wheelEvent(rot_one left, rot_one right)
     // At this point we have a tx buffer and the rotationQueue should be empty (or shorter)
     p->rt.hdr.dst = ADDR_RPI;
     p->rt.hdr.src = ADDR_TEENSY;
-    p->rt.hdr.cmd = CMD_ROT_STATUS;
+    p->rt.hdr.cmd = CMD_WHEEL_STATUS;
     p->rt.hdr.reserved = 0;
     p->rt.rot[ROT_LEFT] = left;
     p->rt.rot[ROT_RIGHT] = right;
@@ -138,7 +107,7 @@ void Telemetry::sendPing(bool &ready, uint32_t &delay)
     }
     p->pp.hdr.dst = ADDR_RPI;
     p->pp.hdr.src = ADDR_TEENSY;
-    p->pp.hdr.cmd = CMD_PING;
+    p->pp.hdr.cmd = CMD_PING_QUERY;
     p->pp.hdr.reserved = 0;
     p->pp.timestamp1 = millis();
     p->pp.timestamp2 = 0;
@@ -195,33 +164,40 @@ packet * Telemetry::txGetPacketFromQueues()
 
 /**
  * @brief Calculate packet length from command (opcode)
+ *
+ * This function is called when the packet is ready for transmission.
  */
 size_t Telemetry::getPacketLength(packet *p)
 {
+    unsigned len;
     switch ((command)p->hdr.cmd)
     {
-    case CMD_PING:
-    case CMD_PONG:
+    case CMD_PING_QUERY:
+    case CMD_PONG_RESP:
         return sizeof(pingpong);
 
-    case CMD_US_SET_SEQ:
+    case CMD_SET_SONAR_SEQ:
         return sizeof(sequence);
 
-    case CMD_US_STOP:
-    case CMD_US_START:
+    case CMD_SONAR_STOP:
+    case CMD_SONAR_START:
         return sizeof(header);
 
-    case CMD_US_STATUS:
+    case CMD_SONAR_STATUS:
         return sizeof(distance);
 
-    case CMD_ROT_STATUS:
+    case CMD_WHEEL_STATUS:
         return sizeof(rotation);
 
-    case CMD_ROT_RESET:
+    case CMD_WHEEL_RESET:
         return sizeof(header);
 
-    case CMD_ERR_COUNT:
-        return sizeof(errorcount);
+    case CMD_ERROR_COUNT:
+        len = strlen(p->ec.name);
+        return (sizeof(header)+sizeof(p->ec.count)+len+1);
+
+    case CMD_GET_COUNTERS:
+        return sizeof(header);
     }
     return 0;
 }
@@ -332,17 +308,17 @@ bool Telemetry::rxEndOfPacketHandling()
     {
         switch ((command)p->hdr.cmd)
         {
-        case CMD_PING:
-            // Reply with a CMD_PONG
+        case CMD_PING_QUERY:
+            // Reply with a CMD_PONG_RESP
             p->pp.hdr.dst = p->pp.hdr.src;
             p->pp.hdr.src = ADDR_TEENSY;
-            p->pp.hdr.cmd = CMD_PONG;
+            p->pp.hdr.cmd = CMD_PONG_RESP;
             p->pp.timestamp2 = millis();
             priorityQueue.push(p);
             p = NULL;
             break;
 
-        case CMD_PONG:
+        case CMD_PONG_RESP:
             // Response to an earlier ping (we hope)
             if ((pingReady != NULL) && (pingDelay != NULL))
             {
@@ -353,22 +329,27 @@ bool Telemetry::rxEndOfPacketHandling()
             p = NULL;
             break;
 
-        case CMD_US_SET_SEQ:
+        case CMD_SET_SONAR_SEQ:
             mainLoop.push(p);
             p = NULL;
             break;
 
-        case CMD_US_STOP:
+        case CMD_SONAR_STOP:
             mainLoop.push(p);
             p = NULL;
             break;
 
-        case CMD_US_START:
+        case CMD_SONAR_START:
             mainLoop.push(p);
             p = NULL;
             break;
 
-        case CMD_ROT_RESET:
+        case CMD_WHEEL_RESET:
+            mainLoop.push(p);
+            p = NULL;
+            break;
+
+        case CMD_GET_COUNTERS:
             mainLoop.push(p);
             p = NULL;
             break;
@@ -610,7 +591,7 @@ void Telemetry::errorCounter(uint32_t count, char const *name)
     {
         p->ec.hdr.dst = ADDR_RPI;
         p->ec.hdr.src = ADDR_TEENSY;
-        p->ec.hdr.cmd = CMD_ERR_COUNT;
+        p->ec.hdr.cmd = CMD_ERROR_COUNT;
         p->ec.hdr.reserved = 0;
         p->ec.count = count;
         strncpy(p->ec.name, name, sizeof(p->ec.name));

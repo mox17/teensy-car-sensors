@@ -10,7 +10,6 @@ class Telemetry
 public:
     Telemetry(HardwareSerial port, unsigned speed);
     void serialPolling();
-    void printErrorCounters(HardwareSerial out);
     void wheelEvent(rot_one left, rot_one right);
     void sonarEvent(packet *sonarPacket);
     void sendPing(bool &ready, uint32_t &delay);

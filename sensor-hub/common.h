@@ -38,15 +38,16 @@
 // Command opcodes
 enum command
 {
-    CMD_PING       = 1,  // timestamp exchange
-    CMD_PONG       = 2,  // timestamp exchange
-    CMD_US_SET_SEQ = 3,  // up to 24 bytes. unused bytes are 0xff
-    CMD_US_STOP    = 4,  // Stop Ultrasound sensors
-    CMD_US_START   = 5,  // Start Ultrasound sensors
-    CMD_US_STATUS  = 6,  // sensor id + distance
-    CMD_ROT_STATUS = 7,  // direction, speed, odo
-    CMD_ROT_RESET  = 8,  // Clear odometer
-    CMD_ERR_COUNT  = 9   // Error counter name and value
+    CMD_PING_QUERY    = 1,  // timestamp exchange
+    CMD_PONG_RESP     = 2,  // timestamp exchange
+    CMD_SET_SONAR_SEQ = 3,  // up to 24 bytes. unused bytes are 0xff
+    CMD_SONAR_STOP    = 4,  // Stop Ultrasound sensors
+    CMD_SONAR_START   = 5,  // Start Ultrasound sensors
+    CMD_SONAR_STATUS  = 6,  // sensor id + distance
+    CMD_WHEEL_STATUS  = 7,  // direction, speed, odo
+    CMD_WHEEL_RESET   = 8,  // Clear odometer
+    CMD_ERROR_COUNT   = 9,  // Error counter name and value
+    CMD_GET_COUNTERS  = 10, // Ask teensy to send all non-zero counters
 };
 
 struct header
