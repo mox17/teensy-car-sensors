@@ -449,7 +449,6 @@ bool Telemetry::txEndOfPacketHandling()
         txCurrentOffset = 0;
         txTotalSize = getPacketLength(p);
         txChecksum = 0;
-        txState = TS_BEGIN;
         return true;
     }
     return false;
@@ -467,7 +466,6 @@ bool Telemetry::txEndOfPacketHandling()
  */
 bool Telemetry::txGetPacketByte(byte &b)
 {
-    bool ret = true;
     switch (txState)
     {
     case TS_BEGIN:
@@ -477,6 +475,7 @@ bool Telemetry::txGetPacketByte(byte &b)
 
     case TS_DATA:
         b = txCurrentPacket->raw[txCurrentOffset++];
+        crcUpdate(txChecksum, b);
         if ((b == FRAME_DATA_ESCAPE)||(b == FRAME_START_STOP))
         {
             txEscByte = b ^ FRAME_XOR;
@@ -528,13 +527,13 @@ bool Telemetry::txGetPacketByte(byte &b)
             b = FRAME_START_STOP;  // This will serve as separator between packets
             txState = TS_DATA;
         } else {
+            // No data available - stay in IDLE mode
             return false;
         }
     }
     // Checksum is calculated over all bytes sent from FRAME_START_STOP up to
     // but not including the checksum byte preceeding the closing FRAME_START_STOP
-    crcUpdate(txChecksum, b);
-    return ret;
+    return true;
 }
 
 inline void Telemetry::crcUpdate(uint16_t &chksum, byte b)
