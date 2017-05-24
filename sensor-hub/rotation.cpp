@@ -2,6 +2,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include "rotation.h"
+#include "counters.h"
 
 const size_t BUFSIZE = 32;
 
@@ -25,8 +26,8 @@ class CircularBuffer
 {
 public:
     CircularBuffer() :
-        m_head(0),
-        m_tail(0),
+        ring_head(0),
+        ring_tail(0),
         m_overflowCount(0)
     {
     }
@@ -34,51 +35,41 @@ public:
     void resetBuffer()
     {
         noInterrupts();
-        m_head = 0;
-        m_tail = 0;
+        ring_head = 0;
+        ring_tail = 0;
         m_overflowCount = 0;
         interrupts();
     }
 
     bool push(uint32_t time, uint32_t count, rotDirection dir)
     {
-        uint8_t t;
-
-        t = m_tail;
-        if (++t >= BUFSIZE)
+        uint8_t next_head = (ring_head + 1) % BUFSIZE;
+        if (next_head != ring_tail)
         {
-            t = 0;
-        }
-        if (t != m_head)
-        {
-            m_tail = t;
-            m_buffer[t].when = time;
-            m_buffer[t].count = count;
-            m_buffer[t].direction = dir;
+            /* there is room */
+            m_buffer[ring_head].when = time;
+            m_buffer[ring_head].count = count;
+            m_buffer[ring_head].direction = dir;
+            ring_head = next_head;
             return true;
-        }
-        else
-        {
+        } else {
+            /* no room left in the buffer */
             m_overflowCount++;
+            cnt.inc(rotBufFull);
             return false;
         }
     }
 
     bool pop(struct rotEvent &event)
     {
-        uint8_t h;
-        if (m_head == m_tail)
+        if (ring_head != ring_tail)
         {
+            event = m_buffer[ring_tail];
+            ring_tail = (ring_tail + 1) % BUFSIZE;
+            return true;
+        } else {
             return false;
         }
-        h = m_head;
-        if (++h >= BUFSIZE)
-        {
-            h = 0;
-        }
-        event = m_buffer[h];          // remove 1 sample from buffer
-        m_head = h;
-        return true;
     }
 
     uint32_t getOverflow()
@@ -89,8 +80,8 @@ public:
     }
 
 private:
-    volatile byte m_head;
-    volatile byte m_tail;
+    volatile byte ring_head;
+    volatile byte ring_tail;
     volatile uint32_t m_overflowCount;
     rotEvent m_buffer[BUFSIZE];
 };
@@ -138,12 +129,7 @@ public:
         pinMode(pin1, INPUT_PULLUP);
         pinMode(pin2, INPUT_PULLUP);
         attachInterrupt(digitalPinToInterrupt(pin1), isr1, CHANGE);
-
-        uint32_t m1, m2;
-        m1 = micros();
         attachInterrupt(digitalPinToInterrupt(pin2), isr2, CHANGE);
-        m2 = micros();
-        Serial.println(m2-m1);
     }
     /**
      * @brief This function is called from ISR handler.
@@ -202,6 +188,7 @@ RotCalc::RotCalc(rotSide side) :
     m_deltaMillis(0),
     m_odometer(0)
 {
+    m_side = side;
 }
 
 /**
@@ -219,9 +206,11 @@ bool RotCalc::handleBuffer()
     byte oldest;
 
     m_latest = millis();
-    while ((dataAvailable = ((m_side == ROT_LEFT) ? leftWheel.getEvent(rec) : rightWheel.getEvent(rec))))
+    while ((dataAvailable = ((m_side == ROT_LEFT) ? leftWheel.getEvent(rec) :
+                                                    rightWheel.getEvent(rec))))
     {
-        if ((rec.direction == ROT_DIR_FORWARD || rec.direction == ROT_DIR_BACKWARD) &&
+        if ((rec.direction == ROT_DIR_FORWARD ||
+             rec.direction == ROT_DIR_BACKWARD) &&
             (m_direction != rec.direction))
         {
             // When direction changes, speed passes through zero. Therefore clear averaging buffer.
@@ -229,10 +218,6 @@ bool RotCalc::handleBuffer()
             m_wHead = avgCount-1;
             m_wCount = 0;
             m_odoDirChg = m_odometer;
-            Serial.print("\n----");
-            Serial.print(m_direction);
-            Serial.print(" - ");
-            Serial.println(rec.direction);
         }
         m_direction = rec.direction;
         m_window[m_wTail] = rec;
@@ -264,23 +249,6 @@ bool RotCalc::handleBuffer()
             m_deltaMillis = m_latest - m_window[oldest].when; // Time window is from oldest sample to now
         }
         m_odometer    = m_window[newest].count;
-        /*
-        Serial.print("[");
-        Serial.print(m_wCount);
-        Serial.print("|");
-        Serial.print(newest);
-        Serial.print("|");
-        Serial.print(oldest);
-        Serial.print("|");
-        Serial.print(m_wTail);
-        Serial.print("|");
-        Serial.print(m_wHead);
-        Serial.print("|");
-        Serial.print(m_deltaPulse);
-        Serial.print("|");
-        Serial.print(m_deltaMillis);
-        Serial.print("]");
-        */
     }
     return newData;
 }
@@ -289,7 +257,6 @@ uint16_t RotCalc::pulsePerSec()
 {
     if (m_deltaPulse && m_deltaMillis)
     {
-        //Serial.print(m_deltaPulse); Serial.print(" "); Serial.println(m_deltaMillis);
         return (1000 * m_deltaPulse / m_deltaMillis);
     }
     else
@@ -333,8 +300,15 @@ void RotCalc::resetOdometer()
 {
     m_odoDirChg = 0;
     m_odometer = 0;
-    leftWheel.resetCounter();
-    rightWheel.resetCounter();
+    switch (m_side)
+    {
+        case ROT_LEFT:
+            leftWheel.resetCounter();
+            break;
+        case ROT_RIGHT:
+            rightWheel.resetCounter();
+            break;
+    }
 }
 
 void isrLeftOne()

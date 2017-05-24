@@ -27,6 +27,7 @@ NAMC(badSonarId,      "Sonar ID is out of range"                          ) \
 NAMC(unknownCommand,  "Unknown CMD field in main message loop"            ) \
 NAMC(badSeqLen,       "Wrong length of sonar sequence"                    ) \
 NAMC(badSonarIdx,     "Wrong sonar ID in sequence"                        ) \
+NAMC(rotBufFull,      "Rotation interrupt buffer full"                    ) \
 NAMC(CounterCount,    ""                                                  )
 
 #define DO_NAME(e, t)  #e,

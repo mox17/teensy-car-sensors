@@ -4,6 +4,35 @@ from collections import namedtuple
 from datetime import datetime
 import serial
 
+
+def locate(user_string, x=0, y=0):
+        # Don't allow any user errors. Python's own error detection will check for
+        # syntax and concatination, etc, etc, errors.
+        x=int(x)
+        y=int(y)
+        if x>=255: x=255
+        if y>=255: y=255
+        if x<=0: x=0
+        if y<=0: y=0
+        HORIZ=str(x)
+        VERT=str(y)
+        # Plot the user_string at the starting at position HORIZ, VERT...
+        print("\033["+VERT+";"+HORIZ+"f"+user_string)
+
+def prettyPrintDist(dist):
+    sensor = dist.sensor
+    locate(' {:10d}cm'.format(dist.distance), 14*sensor, 1)
+    locate("",0,8)
+    return
+
+def prettyPrintWheels(left, right):
+    locate(' {:10d} pulses {:10d} pulses'.format(left.dist, right.dist), 1, 3)
+    locate(' {:10}         {:10}'.format(left.speed,     right.speed), 1, 4)
+    locate(' {:10}         {:10}'.format(left.direction, right.direction), 1, 5)
+    locate(' {:10}         {:10}'.format(left.turn,      right.turn), 1, 6)
+    locate("",0,8)
+    return
+
 # Utility access functions 
 def get32(bytes):
     val = bytes[0] + 0x100*bytes[1] + 0x10000*bytes[2] + 0x1000000*bytes[3]
@@ -132,11 +161,13 @@ def decodeFrame(frm):
         pass
     elif hdr.cmd == Cmd.CMD_SONAR_STATUS:
         dist = getSonarStatus(frm)
-        print(dist)
+        prettyPrintDist(dist)
+        #print(dist)
     elif hdr.cmd == Cmd.CMD_WHEEL_STATUS:
         left  = getRotation(frm)
         right = getRotation(frm[16:])
-        print("Rotation", left, right)
+        #print("Rotation", left, right)
+        prettyPrintWheels(left, right)
         pass
     elif hdr.cmd == Cmd.CMD_WHEEL_RESET:
         pass
@@ -243,7 +274,11 @@ def sendPing(timestamp1):
     # Put buffer on tx queue
     return
 
+def getTxByte():
+    return [False,None]
+
 def main():
+    for n in range(0, 64, 1): print("\r\n")
     connected = False
     port = '/dev/ttyUSB0'
     baud = 115200
@@ -259,6 +294,9 @@ def main():
                 data_str = ser.read(ser.inWaiting())
                 for b in data_str:
                     decodeByte(b)
+            txData = getTxByte()
+            if txData[0]:
+                ser.write(txData[1])
             #Put the rest of your code you want here
         return
 
