@@ -38,11 +38,15 @@ Whenever an interrupt from one of the sensors is received, the following happens
 2. The overall timestamp is updated.
 3. The direction is calculated
    * If direction is valid and the same as previous direction, a record with (time, pulsecount) is added to a circular buffer. The buffer holds up to N latest entries. The count is updated, but never exceeds N, as old entried are discarded.
-   * If the direction is valid buf different from previous direction, the buffer is cleared and a single new record saved.
-4. The rate of wheel events to main computer is limited to max one update per 5ms. If time since last update (there is a special timestamp for this) is 5ms or more, a new update is calculated and put on TX queue. This calculation includes speed in pulses/second, based on the first and last entry in the buffer. If only one sample is in buffer, the speed is defined as 0.
+   * If the direction is valid but different from previous direction, the buffer is cleared and a single new record saved.
+4. The rate of wheel events to main computer is limited to max one update per 5ms. If time since last update (there is a special timestamp for this) is 5ms or more, a new update is calculated and put on the TX queue for wheel events. This calculation includes speed in pulses/second, based on the first and last entry in the buffer. If only one sample is in the buffer, the speed is defined as 0.
 
-### timer event
-The wheel events are sent at least every 200ms. A timer handler is called from main loop every 200ms. An interval timer could also be used, resources permitting.
-If no wheel update has been sent for 200ms, then no interrupts have been received for 200ms.
+### Timer events
+The wheel events are sent at least every 200ms. A timer handler is called from main loop every 200ms. 
+
+An interval timer could also be used, resources permitting.
+
+If no wheel update have been sent for 200ms, then no interrupts have been received for 200ms.
+
 A new event record with same pulse count and direction, but different timestamp is added to buffer, and speed is calculated from this.
 
