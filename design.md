@@ -6,18 +6,26 @@ With two sensors on a wheel, the direction of rotation can detected through the 
 Each wheel has 5 magnets. When a magnet passes a sensor, there is a pulse.
 Each sensor will see 10 transitions for a full wheel revolution and with two sensors, this is 20 transitions per revolution.
 
-Diameter approx 9.5cm
-Circumference pi x 9.5 = 29.8cm
-5 magnets, 2 sensors = 20 pulses per rev.
-29.8/20 = 1.5cm/pulse
+Diameter approx | 9.5cm |
+Circumference | pi x 9.5 = 29.8cm 
+5 magnets, 2 sensors | 20 pulses per rev.
+Resolution | 29.8/20 = 1.5cm/pulse
 
-Walking speed 5km/h = 1.39m/s
+## Estimating event timings
+A useful baseline for an autonomous model car is walking speed 5km/h = 1.39m/s
 
+So the pulserate for a single wheel at walking speed would be:
 1.39/0.015 = 92.6 pulses/s
 
 2 wheels -> approx 200 pulses/s @ 5km/h
+
+Another assumption is the max speed we expect the car to drive. 30km/h seems a reasonable number to calculate.
+
 Max speed 30km/h => 1200 pulses/s
 0.83ms between wheel sensor interrupts.
+
+The control software will not need wheel rotation updates every millisecond, so next a number of limit are defined for the event rate supplied to main computer. 
+Testing may show a need to adjust this, but for now these are the working assumptions.
 
 Max update speed 30 updates/s  33ms
 Min update speed 5 updates/s.  200ms
@@ -138,3 +146,4 @@ It will still be possible for a ping to return from more than 4m and be picked u
 So a slightly conservative sonar measurement rate is one per 30ms, which is 33 measurements per second.
 
 The default setting is using each sensor in turn, in a round-robin pattern.
+^^^^^^^^
