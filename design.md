@@ -6,7 +6,7 @@ With two sensors on a wheel, the direction of rotation can detected through the 
 Each wheel has 5 magnets. When a magnet passes a sensor, there is a pulse.
 Each sensor will see 10 transitions for a full wheel revolution and with two sensors, this is 20 transitions per revolution.
 
-Diameter approx | 9.5cm |
+Diameter approx | 9.5cm
 Circumference | pi x 9.5 = 29.8cm 
 5 magnets, 2 sensors | 20 pulses per rev.
 Resolution | 29.8/20 = 1.5cm/pulse
