@@ -1,5 +1,6 @@
 # Design notes
 
+# Wheel rotation sensors
 The wheel sensor is based on four hall-effect sensors, two on each rear wheel.
 With two sensors on a wheel, the direction of rotation can detected through the phase difference between signals from the sensors.
 Each wheel has 5 magnets. When a magnet passes a sensor, there is a pulse.
@@ -50,3 +51,90 @@ If no wheel update have been sent for 200ms, then no interrupts have been receiv
 
 A new event record with same pulse count and direction, but different timestamp is added to buffer, and speed is calculated from this.
 
+### What is a proper definition of speed?
+When coming to a stop, the timer events cause up to N events with a non-zero speed, even if no movement has been detected over the last N times 200ms.
+
+This will cause the contradiction in the data that speed is non-zero, while pulse count is static.
+
+Any dead-reckoning logic based on the wheel events should use the pulse counts and timestamps as basis for position calculation.
+The speed is not valid for calculating position, but can be used for dynamic adjustments, such as motor throttle control.
+
+# Sonar sensors
+There are 6 sonar sensors. It is assumed that all sensors behave the same and are interfaced the same way.
+
+These are modified [HC-SR04](http://www.electroschematics.com/8902/hc-sr04-datasheet/) sensors.
+The modification is combining the TRIG input with the ECHO output in a way that is compatible with 3.3V levels used by the [Teensy-LC](https://www.pjrc.com/teensy/teensyLC.html).
+This is done by removing 10K pull-ups on the HC-SR04 board from TRIG and ECHO and and connecting ECHO to trig via a 18K over 30K voltage divider.
+
+The end result is a sensor which can be driven over a single GPIO pin connected to TRIG input.
+
+To do a measurement the following steps are needed:
+1. Set GPIO to output.
+2. Set pin low for 4microseconds.
+3. Set pin high for 10 microseconds.
+4. Set GPIO to input.
+5. Wait for input to go high (this is when ping has been sent).
+  * Keep timestamp, let's call it pingSent.
+  * This waiting can be done with an interrupt handler.
+6. Wait for input to go low.
+  * When this happens time is pingReceived.
+  * This waiting can be done with an interrupt handler.
+
+In the normal case, the result is pingReceived-pingSent. This is the round-trip time for the signal. Using the speed of sound a distance can be calculated.
+
+A number of things can go wrong:
+1. The sonar may be disconnected.
+2. The sonar may not be ready for a new measurement yet.
+3. No echo is ever received - how does the HC-SR04 react?
+4. The sonar is defective and has an extremely short ECHO pulse.
+5. ... (more failure modes to be discovered)
+
+
+
+~~~~c++
+    *m_trigMode |= m_trigBit;  // Set trigger pin to output.
+    *m_trigOut &= ~m_trigBit;  // Set the trigger pin low, should already be low, but this will make sure it is.
+    delayMicroseconds(4);      // Wait for pin to go low, testing shows it needs 4uS to work every time.
+    *m_trigOut |= m_trigBit;   // Set trigger pin high, this tells the sensor to send out a ping.
+    delayMicroseconds(10);     // Wait long enough for the sensor to realize the trigger pin is high. Sensor specs say to wait 10uS.
+    *m_trigOut  &= ~m_trigBit; // Set trigger pin back to low.
+    *m_trigMode &= ~m_trigBit; // Set trigger pin to input (when using one Arduino pin this is technically setting the echo pin to input as both are tied to the same Arduino pin).
+
+    m_maxTime = micros() + m_maxEchoTime + MAX_SENSOR_DELAY;   // Set a timeout for the ping to trigger.
+    while ((*m_echoIn & m_echoBit) && (micros() <= m_maxTime))
+    { // Wait for echo pin to clear.
+    }
+    digitalWrite(13,true);  // Make time spent here visible on a scope
+    while (!(*m_echoIn & m_echoBit))
+    {
+        // Wait for ping to start.
+        // TODO: this could be interrupt driven
+        if (micros() > m_maxTime)
+        {
+            digitalWrite(13,false); // Make time spent here visible on a scope
+            return false;
+        }
+    }
+    digitalWrite(13,false); // Make time spent here visible on a scope
+    m_maxTime = micros() + m_maxEchoTime;
+    timerMicroS(m_maxTime, pingTimeout);
+    // Use interrupt to determine echo time
+    currentEchoPin = m_echoPin;
+    attachInterrupt(currentEchoPin, isrEcho, FALLING);
+    return true;
+~~~~
+
+
+## Measurement scheduling
+Since sonars all use the same audio frequencies, only one sonar can be active at a time.
+If a sonar returns a result because of a very quick echo (some obstacle is close by), and the next sonar is immediately started, the 2nd sonar may receive a "late" secondary echo from the 1st sonar, and this can count as a false measurement from sonar #2.
+
+It is therefore important to separate the sonar measurements in time to avoid this.
+The sonars are specified to measure up to 400cm. With a speed of sound of approx 340m/s, an echo from 4m away will take about 24ms to arrive.
+
+So each ping should be sent no closer than 24ms apart.
+It will still be possible for a ping to return from more than 4m and be picked up by the next sonar, but the likelihood is diminishing because of the loss of audio signal stregth.
+
+So a slightly conservative sonar measurement rate is one per 30ms, which is 33 measurements per second.
+
+The default setting is using each sensor in turn, in a round-robin pattern.
