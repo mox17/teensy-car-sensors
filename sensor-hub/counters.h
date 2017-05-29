@@ -6,7 +6,8 @@
  * a new counter.
  * The name and value can be sent to remote side.
  */
-#pragma once
+#ifndef COUNTERS_H
+#define COUNTERS_H
 #include <Arduino.h>
 
 #define NAMED_COUNTERS(NAMC) \
@@ -30,6 +31,7 @@ NAMC(unknownCommand,  "Unknown CMD field in main message loop"            ) \
 NAMC(badSeqLen,       "Wrong length of sonar sequence"                    ) \
 NAMC(badSonarIdx,     "Wrong sonar ID in sequence"                        ) \
 NAMC(rotBufFull,      "Rotation interrupt buffer full"                    ) \
+NAMC(rotUpdSkip,      "Less than 5ms between updates"                     ) \
 NAMC(CounterCount,    ""                                                  )
 
 #define DO_NAME(e, t)  #e,
@@ -56,3 +58,5 @@ private:
 };
 
 extern Counters cnt;
+
+#endif // COUNTERS_H

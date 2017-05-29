@@ -1,9 +1,12 @@
 
-#pragma once
+#ifndef TELEMETRY_H
+#define TELEMETRY_H
 #include <Arduino.h>
 #include <HardwareSerial.h>
 #include "common.h"
 #include "queuelist.h"
+
+static const unsigned WHEEL_EVENT_MIN_INTERVAL = 5;
 
 class Telemetry
 {
@@ -90,3 +93,5 @@ private:
     bool txEndOfPacketHandling();
     bool txGetPacketByte(byte &b);
 };
+
+#endif // TELEMETRY_H

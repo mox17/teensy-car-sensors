@@ -2,7 +2,8 @@
  *  This class encapsulates the use of a HC-SR04 style sonar
  *
  */
-#pragma once
+#ifndef SONARARRAY_H
+#define SONARARRAY_H
 #include "iping.h"
 #include "common.h"
 
@@ -40,4 +41,4 @@ private:
     static SonarArray *m_instance; // This class is a singleton
 };
 
-
+#endif // SONARARRAY_H

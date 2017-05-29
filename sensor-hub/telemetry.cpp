@@ -41,7 +41,7 @@ Telemetry::Telemetry(HardwareSerial port, unsigned speed) :
 /**
  * @brief Send wheel event to RPi.
  *
- * Replace any pending event already in queue.
+ * Replace any pending event already in TX queue.
  */
 void Telemetry::wheelEvent(rot_one left, rot_one right)
 {

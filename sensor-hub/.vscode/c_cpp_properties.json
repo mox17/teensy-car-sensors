@@ -3,12 +3,14 @@
         {
             "name": "Linux",
             "includePath": [
-                "/home/erling/.arduino15/packages/arduino/hardware/samd/1.6.15/cores/arduino"
+                "/opt/arduino-1.8.2/hardware/teensy/avr/cores/teensy3",
+                "/opt/arduino-1.8.2/hardware/tools/arm/lib/gcc/arm-none-eabi/5.4.1/include"
             ],
             "browse": {
-                "limitSymbolsToIncludedHeaders": false,
+                "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "/home/erling/.arduino15/packages/arduino/hardware/samd/1.6.15/cores/arduino"
+                    "/opt/arduino-1.8.2/hardware/teensy/avr/cores/teensy3",
+                    "/opt/arduino-1.8.2/hardware/tools/arm/lib/gcc/arm-none-eabi/5.4.1/include"
                 ]
             }
         }

@@ -1,0 +1,10 @@
+{
+  "builtInLibrariesFolders": "",
+  "customBuildProperties": "build.fcpu=96000000,build.flags.optimize=-Os,build.flags.ldspecs=--specs=nano.specs,build.keylayout=US_ENGLISH,build.usbtype=USB_SERIAL",
+  "fqbn": "teensy:avr:teensy31",
+  "hardwareFolders": "/opt/arduino-1.8.2/hardware",
+  "otherLibrariesFolders": "",
+  "runtime.ide.version": "10600",
+  "sketchLocation": "/home/erling/src/teensy-car-sensors/sensor-hub/sensor-hub.ino",
+  "toolsFolders": "/opt/arduino-1.8.2/hardware/tools,/opt/arduino-1.8.2/tools-builder"
+}

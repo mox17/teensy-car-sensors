@@ -14,8 +14,9 @@ const int hallPinL2 = 22;
 const int hallPinR1 = 21;
 const int hallPinR2 = 20;
 
-// Sonar setup
+// Prototypes
 void mainSonarReport(int id, int value, unsigned long time_in_ms);
+void mainWheelReport(rot_one left, rot_one right);
 
 const int maxDistance = 200; // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
 const int ultraSound1TrigPin = 2;
@@ -30,22 +31,19 @@ volatile unsigned long sonarTiming[MAX_NO_OF_SONAR] = {0}; // Timestamp;
 volatile int sonarUpdate = 0;      // sonar event counter - updated from interrupt context
 int sonarTrack = 0;                // Compare with sonarUpdate to determine updates
 SonarArray sonarArray(sonarCount, sonarPins, maxDistance, mainSonarReport);
-
-unsigned loopTimer;
-unsigned rotationUpdate=0;  // When was last time a wheel update was done
-
 // Setup serial to RPi
 Telemetry messageHandling(Serial1, 115200);
-RotCalc rotLeft = RotCalc(ROT_LEFT);
-RotCalc rotRight = RotCalc(ROT_RIGHT);
+// Wheel sensor setup
+Axle axle = Axle(mainWheelReport);
+
+unsigned loopTimer;
 
 void setup()
 {
-    Serial.begin(115200);
+    Serial.begin(115200);  // USB serial traces
     pinMode(ledPin, OUTPUT);
 
-    // Wheel sensor configuration
-    Rotation(hallPinL1, hallPinL2, hallPinR1, hallPinR2);
+    axle.config(hallPinL1, hallPinL2, hallPinR1, hallPinR2);
     loopTimer = millis(); // Start now.
     sonarArray.startSonar();
     // Control ultrasound sensor sequencing
@@ -54,35 +52,30 @@ void setup()
 }
 
 uint32_t errorCounterTime;
+uint32_t wheelCounterTime;
 bool newWheelData = false;
 
 void loop()
 {
+    uint32_t now = millis();
     bool newSonarData = (sonarTrack != sonarUpdate);
 
-    if (millis() > errorCounterTime)
+    if (now > errorCounterTime)
     {
         errorCounterTime = millis() + 1000;
         cnt.printNZ();
         cnt.sendNZ();
         if (sonarArray.getState() == SonarArray::SONAR_PING_ERROR)
         {
-            // Try a restart
-            sonarArray.startSonar();
+            sonarArray.startSonar(); // Try a restart
         }
     }
 
-    rotLeft.handleBuffer();
-    rotRight.handleBuffer();
-    if (rotLeft.newData() || rotRight.newData())
+    // Wheel slow speed handling
+    if (now > wheelCounterTime)
     {
-        // When there is new data put a message on the queue for
-        // transmission to RPi
-        rot_one l, r;
-        rotLeft.rotGetRec(l);
-        rotRight.rotGetRec(r);
-        messageHandling.wheelEvent(l, r);
-        newWheelData = true;
+        wheelCounterTime = now+WHEEL_MAX_INTERVAL_MS;
+        axle.timeout();
     }
 
     // Display when new data is available
@@ -96,6 +89,7 @@ void loop()
     }
     // Drive the RX/TX messaging queues towards RPi
     messageHandling.serialPolling();
+    // Handle main message queue
     handleMessageQueue();
 }
 
@@ -163,8 +157,7 @@ void handleMessageQueue()
             break;
 
         case CMD_WHEEL_RESET:
-            rotLeft.resetOdometer();
-            rotRight.resetOdometer();
+            axle.resetOdometer();
             break;
 
         case CMD_GET_COUNTERS:
@@ -195,13 +188,12 @@ void handleMessageQueue()
 
 void rotationStatus()
 {
-    rotationUpdate = millis();
     Serial.print(" ");
-    Serial.print(rotLeft.direction());
+    Serial.print(axle.direction());
     Serial.print(" ");
-    Serial.print(rotLeft.odometer());
+    Serial.print(axle.odometer());
     Serial.print(" ");
-    Serial.print(rotLeft.pulsePerSec());
+    Serial.print(axle.pulsePerSec());
 }
 
 void sonarStatus()
@@ -232,4 +224,12 @@ void mainSonarReport(int id, int value, unsigned long time_in_ms)
         p->ds.when = time_in_ms;
         messageHandling.putMainLoopPacket(p);
     }
+}
+
+/**
+ * @brief Callback from wheel sensor interrupt handler
+ */
+void mainWheelReport(rot_one left, rot_one right)
+{
+    messageHandling.wheelEvent(left, right);
 }
