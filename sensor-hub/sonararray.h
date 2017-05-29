@@ -7,8 +7,9 @@
 #include "iping.h"
 #include "common.h"
 
-class SonarArray {
+#define SONAR_PING_INTERVAL 50  // time between echo and next ping
 
+class SonarArray {
 public:
     enum sonarState {
         SONAR_STOPPED,   //!< No pinging
@@ -22,6 +23,7 @@ public:
     bool sonarRunning();
     void setSequence(byte length, byte seq[]);
     bool nextSonar();
+    unsigned getId();
 
     static IPing* m_currentSensor;
     static void(*m_report)(int id, int value, unsigned long time_in_ms);

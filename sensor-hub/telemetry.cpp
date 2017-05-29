@@ -195,6 +195,9 @@ size_t Telemetry::getPacketLength(packet *p)
     case CMD_ERROR_COUNT:
         len = strlen(p->ec.name);
         return (sizeof(header)+sizeof(p->ec.count)+len+1);
+
+    case CMD_SONAR_WAIT:
+        return sizeof(sonarwait);
     }
     return 0;
 }
@@ -351,10 +354,16 @@ bool Telemetry::rxEndOfPacketHandling()
             p = NULL;
             break;
 
+        case CMD_SONAR_WAIT:
+            mainLoop.push(p);
+            p = NULL;
+            break;
+
         default:
             cnt.inc(rxErrorUnknown);
             counterUpdate = true;
             break;
+
         }
         if (p != NULL)
         {

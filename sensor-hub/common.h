@@ -49,6 +49,7 @@ enum command
     CMD_ERROR_COUNT   = 9,  //!< Error counter name and value
     CMD_GET_COUNTERS  = 10, //!< Ask teensy to send all non-zero counters
     CMD_SONAR_RETRY   = 11, //!< Do a repeat nextSonar() (for internal stall recovery)
+    CMD_SONAR_WAIT    = 12, //!< Set waiting time between sonar pings in ms
 };
 
 
@@ -144,6 +145,12 @@ struct errorcount
     char name[24];   //!< ASCIIZ name
 } __attribute__((packed));
 
+struct sonarwait
+{
+    struct header hdr;
+    uint32_t pause; //!< interval in ms
+} __attribute__((packed));
+
 // @union This union is only for calculating max message size
 union payload
 {
@@ -152,6 +159,7 @@ union payload
     struct distance ds;
     struct rotation rt;
     struct errorcount ec;
+    struct sonarwait sw;
 } __attribute__((packed));
 
 const size_t MAX_MSG_SIZE = sizeof(payload);
@@ -168,5 +176,6 @@ struct packet : node
         struct distance ds;       //!< Distance (sonar) data
         struct rotation rt;       //!< Wheel data
         struct errorcount ec;     //!< Error counter (one counter per msg)
+        struct sonarwait sw;      //!< Interval from echo return to next ping
     };
 } __attribute__((packed));

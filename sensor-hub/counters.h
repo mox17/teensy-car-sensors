@@ -32,6 +32,12 @@ NAMC(badSeqLen,       "Wrong length of sonar sequence"                    ) \
 NAMC(badSonarIdx,     "Wrong sonar ID in sequence"                        ) \
 NAMC(rotBufFull,      "Rotation interrupt buffer full"                    ) \
 NAMC(rotUpdSkip,      "Less than 5ms between updates"                     ) \
+NAMC(errPing0,        "Error sending ping sonar 0"                        ) \
+NAMC(errPing1,        "Error sending ping sonar 1"                        ) \
+NAMC(errPing2,        "Error sending ping sonar 2"                        ) \
+NAMC(errPing3,        "Error sending ping sonar 3"                        ) \
+NAMC(errPing4,        "Error sending ping sonar 4"                        ) \
+NAMC(errPing5,        "Error sending ping sonar 5"                        ) \
 NAMC(CounterCount,    ""                                                  )
 
 #define DO_NAME(e, t)  #e,

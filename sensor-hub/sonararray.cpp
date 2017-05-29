@@ -58,6 +58,11 @@ bool SonarArray::startSonar()
     return true;
 }
 
+unsigned SonarArray::getId()
+{
+    return m_sequence[m_current];
+}
+
 /**
  * @brief Start the next sonar
  *

@@ -22,8 +22,16 @@ const int maxDistance = 200; // Maximum distance we want to ping for (in centime
 const int ultraSound1TrigPin = 2;
 const int ultraSound2TrigPin = 3;
 const int ultraSound3TrigPin = 4;
-const int sonarPins[] = {ultraSound1TrigPin, ultraSound2TrigPin, ultraSound3TrigPin};
-const int sonarCount = 3;//sizeof(sonarPins)/sizeof(sonarPins[0]);
+const int ultraSound4TrigPin = 5;
+const int ultraSound5TrigPin = 6;
+const int ultraSound6TrigPin = 7;
+const int sonarPins[] = {ultraSound1TrigPin,
+                         ultraSound2TrigPin,
+                         ultraSound3TrigPin,
+                         ultraSound4TrigPin,
+                         ultraSound5TrigPin,
+                         ultraSound6TrigPin};
+const int sonarCount = 6;
 
 volatile unsigned int sonarResults[MAX_NO_OF_SONAR] = {0};// Raw timing data in microseconds
 volatile unsigned int sonarCounts[MAX_NO_OF_SONAR] = {0}; // Number of reports
@@ -51,9 +59,25 @@ void setup()
     //sonarArray.setSequence(8, sequence);
 }
 
-uint32_t errorCounterTime;
-uint32_t wheelCounterTime;
+uint32_t errorCounterTime = 0;
+uint32_t wheelCounterTime = 0;
+uint32_t sonarPingInterval = SONAR_PING_INTERVAL;
+uint32_t sonarDelayTime = 0;
+bool sonarDelayFlag = false;
 bool newWheelData = false;
+
+void handlePingError()
+{
+    switch (sonarArray.getId())
+    {
+    case 0 : cnt.inc(errPing0); break;
+    case 1 : cnt.inc(errPing1); break;
+    case 2 : cnt.inc(errPing2); break;
+    case 3 : cnt.inc(errPing3); break;
+    case 4 : cnt.inc(errPing4); break;
+    case 5 : cnt.inc(errPing5); break;
+    }
+}
 
 void loop()
 {
@@ -74,18 +98,27 @@ void loop()
     // Wheel slow speed handling
     if (now > wheelCounterTime)
     {
-        wheelCounterTime = now+WHEEL_MAX_INTERVAL_MS;
+        wheelCounterTime = now + WHEEL_MAX_INTERVAL_MS;
         axle.timeout();
     }
 
-    // Display when new data is available
-    if (false && (newWheelData || newSonarData))
+    if (sonarDelayFlag)
     {
-        rotationStatus();
-        sonarStatus();
-        sonarTrack = sonarUpdate;
-        Serial.println("");
-        newWheelData = false;
+        if (now > sonarDelayTime)
+        {
+            sonarDelayFlag = false;
+            if (!sonarArray.nextSonar())
+            {
+                handlePingError();
+                // Schedule a retry
+                packet *retry = messageHandling.getEmptyPacket();
+                retry->hdr.dst = ADDR_TEENSY;
+                retry->hdr.src = ADDR_TEENSY;
+                retry->hdr.cmd = CMD_SONAR_RETRY;
+                retry->hdr.reserved = 0;
+                messageHandling.putMainLoopPacket(retry);
+            }
+        }
     }
     // Drive the RX/TX messaging queues towards RPi
     messageHandling.serialPolling();
@@ -141,18 +174,11 @@ void handleMessageQueue()
                 // Put message on UART TX queue
                 messageHandling.sonarEvent(p);
                 p = NULL;
+                // Start next sonar after a delay
+                sonarDelayTime = millis() + sonarPingInterval;
+                sonarDelayFlag = true;
             } else {
                 cnt.inc(badSonarId);
-            }
-            if (!sonarArray.nextSonar())
-            {
-                // Schedule a retry
-                packet *retry = messageHandling.getEmptyPacket();
-                retry->hdr.dst = ADDR_TEENSY;
-                retry->hdr.src = ADDR_TEENSY;
-                retry->hdr.cmd = CMD_SONAR_RETRY;
-                retry->hdr.reserved = 0;
-                messageHandling.putMainLoopPacket(retry);
             }
             break;
 
@@ -168,9 +194,15 @@ void handleMessageQueue()
             // Try starting the sonars again...
             if (!sonarArray.nextSonar())
             {
+                handlePingError();
+                // Next retry
                 messageHandling.putMainLoopPacket(p);
                 p = NULL;
             }
+            break;
+
+        case CMD_SONAR_WAIT:
+            sonarPingInterval = p->sw.pause;
             break;
 
         default:
