@@ -87,8 +87,8 @@ void loop()
     if (now > errorCounterTime)
     {
         errorCounterTime = millis() + 1000;
-        cnt.printNZ();
-        cnt.sendNZ();
+        //cnt.printNZ();
+        //cnt.sendNZ();
         if (sonarArray.getState() == SonarArray::SONAR_PING_ERROR)
         {
             sonarArray.startSonar(); // Try a restart
@@ -161,6 +161,7 @@ void handleMessageQueue()
 
         case CMD_SONAR_START:
             sonarArray.startSonar();
+            sonarArray.nextSonar();
             break;
 
         case CMD_SONAR_STATUS:

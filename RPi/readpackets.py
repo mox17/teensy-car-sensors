@@ -13,7 +13,7 @@ def getMilliSeconds():
     dt = datetime.now()
     return dt.second * 1000 + dt.microsecond / 1000
 
-# The tx queue have byte arrays 
+# The TX queue have byte arrays 
 txQueue = Queue.Queue()
 currTxPacket = None
 
@@ -198,7 +198,7 @@ def decodeFrame(frm):
         pass
     elif hdr.cmd == Cmd.CMD_ERROR_COUNT:
         err = getErrorCount(frm)
-        print(err)
+        print("\033[K",err)
         
     return
 
@@ -348,9 +348,7 @@ def getDataPacket():
     if currTxPacket == None or len(currTxPacket) == 0:
         if not txQueue.empty():
             currTxPacket = appendChecksum(txQueue.get())
-            #print("getDataPacket-true-")
             return True
-    #print("getDataPacket-false-")
     return False
 
 def getDataByte():
@@ -363,9 +361,7 @@ def getDataByte():
         if len(currTxPacket) > 0:
             b = currTxPacket[0]
             currTxPacket = currTxPacket[1:]
-            #print("getDataByte-true-")
             return [True, b]
-    #print("getDataByte-false-")
     return [False,None]
 
 def txDataAvailable():
@@ -387,8 +383,6 @@ escByte = None
 def getTxByte():
     global txState
     global escByte
-
-    #print("getTxByte",txState)
 
     if txState == txs.TS_BEGIN:
         if txDataAvailable():
@@ -421,17 +415,18 @@ def getTxByte():
     return [False,None]
 
 def handleKeyPress(key):
-    status = True
-    if key in "pP":
-        sendPing()
-    elif key in "nN":
-        sendSonarStop()
-    elif key in "sS":
-        sendSonarStart()
-    elif key in "rR":
-        sendWheelReset()
-    elif key in "qQ":
-        status = False
+    key = key.upper()
+    status = \
+    { 'P': sendPing() or True,
+      'N': sendSonarStop() or True,
+      'S': sendSonarStart() or True,
+      'R': sendWheelReset() or True,
+      'C': sendGetCounters() or True,
+      '\x0C' : clearScreen() or True,
+      'X': sendSonarSequence([0,1,5]) or True,
+      'Y': sendSonarSequence([0,1,2,3,4,5]) or True,
+      'Q': False,
+    }[key]
     return status
 
 
