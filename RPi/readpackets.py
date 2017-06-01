@@ -4,6 +4,14 @@ from collections import namedtuple
 from datetime import datetime
 import serial
 import Queue
+import select
+import sys
+import termios
+import atexit
+
+def getMilliSeconds():
+    dt = datetime.now()
+    return dt.second * 1000 + dt.microsecond / 1000
 
 # The tx queue have byte arrays 
 txQueue = Queue.Queue()
@@ -38,6 +46,14 @@ def prettyPrintWheels(left, right):
     locate(' {:10} turn    {:10} turn'.format(left.turn,      right.turn), 1, 6)
     locate(' {:10} ms'.format(left.when), 1, 8)
     locate("",0,9)
+    return
+
+def prettyPrintPong(resp, now):
+    locate('{:10}ms  {:10}ms'.format(now -resp.timestamp1, resp.timestamp2), 25, 8)
+    return
+
+def clearScreen():
+    print("\033[2J")
     return
 
 # Utility access functions 
@@ -94,7 +110,7 @@ pingpong   = namedtuple("pingpong", "timestamp1 timestamp2")
 distance   = namedtuple("distance", "sensor distance when")
 rotation   = namedtuple("rotation", "speed direction when turn dist")
 errorcount = namedtuple("errorcount", "count name")
-sonarwait  = namedtuple("pause")
+#sonarwait  = namedtuple("pause")
 
 def getPingPong(frm):
     """
@@ -151,6 +167,7 @@ def getErrorCount(frm):
 
 def decodeFrame(frm):
     global Cmd
+
     if len(frm)< 4:
         return
     hdr = header(frm[0], frm[1], frm[2], frm[3])
@@ -161,7 +178,7 @@ def decodeFrame(frm):
         print("PING", pp)
     elif hdr.cmd == Cmd.CMD_PONG_RESP:
         pp = getPingPong(frm)
-        print("PONG", pp)
+        prettyPrintPong(pp, getMilliSeconds())
     elif hdr.cmd == Cmd.CMD_SET_SONAR_SEQ:
         pass
     elif hdr.cmd == Cmd.CMD_SONAR_STOP:
@@ -273,12 +290,10 @@ def add16(buf, value):
     buf.append(value & 0xff)
     return buf
 
-def sendPing(timestamp1):
-    buffer = buildHeader(ADDR_TEENSY, ADDR_RPI, Cmd.CMD_PING)
-    dt = datetime.now()
-    milliSecond = dt.microsecond / 1000
-    buffer = add32(buf, milliSecond) # timestamp1
-    buffer = add32(buf, 0)           # timestamp2
+def sendPing():
+    buffer = buildHeader(ADDR_TEENSY, ADDR_RPI, Cmd.CMD_PING_QUERY)
+    buffer = add32(buffer, getMilliSeconds()) # timestamp1
+    buffer = add32(buffer, 0)           # timestamp2
     txQueue.put(buffer)
     return
 
@@ -317,7 +332,7 @@ def sendSonarSequence(sequence):
         txQueue.put(buffer)
     return
 
-def calcChecksum(buf):
+def appendChecksum(buf):
     sum = 0
     for b in buf:
         sum += b
@@ -329,12 +344,14 @@ def calcChecksum(buf):
 def getDataPacket():
     global txQueue
     global currTxPacket
-    if not txQueue.empty():
-        currTxPacket = calcChecksum(txQueue.get())
-        return true
-    else:
-        currTxPacket = None
-    return false
+
+    if currTxPacket == None or len(currTxPacket) == 0:
+        if not txQueue.empty():
+            currTxPacket = appendChecksum(txQueue.get())
+            #print("getDataPacket-true-")
+            return True
+    #print("getDataPacket-false-")
+    return False
 
 def getDataByte():
     # return tuple (dataAvailable, byteToSend)
@@ -346,33 +363,36 @@ def getDataByte():
         if len(currTxPacket) > 0:
             b = currTxPacket[0]
             currTxPacket = currTxPacket[1:]
+            #print("getDataByte-true-")
             return [True, b]
+    #print("getDataByte-false-")
     return [False,None]
 
 def txDataAvailable():
-    if currTxPacket != None:
+    if txState != txs.TS_BEGIN or (currTxPacket != None and len(currTxPacket) > 0):
         return True
     else:
         return getDataPacket()
 
 # TX state machine states
 txs = enum(
-        TS_BEGIN,        #//!< Nothing sent yet, deliver 0x7e
-        TS_DATA,         #//!< Sending normal data
-        TS_ESCAPE,       #//!< Escape has been sent, escByte is next
-        TS_END,          #//!< Checksum sent, frame is next. Can be skipped if there is a next packet in queue
-        TS_IDLE,         #//!< No data to transmit.
+        TS_BEGIN  = 1,  #//!< Nothing sent yet, deliver 0x7e
+        TS_DATA   = 2,  #//!< Sending normal data
+        TS_ESCAPE = 3,  #//!< Escape has been sent, escByte is next
         )
 
 txState = txs.TS_BEGIN
 escByte = None
 
 def getTxByte():
+    global txState
     global escByte
+
+    #print("getTxByte",txState)
 
     if txState == txs.TS_BEGIN:
         if txDataAvailable():
-            txState = txs.TX_DATA
+            txState = txs.TS_DATA
             return [True, FRAME_START_STOP]
         else:
             return [False,None]
@@ -400,28 +420,76 @@ def getTxByte():
 
     return [False,None]
 
+def handleKeyPress(key):
+    status = True
+    if key in "pP":
+        sendPing()
+    elif key in "nN":
+        sendSonarStop()
+    elif key in "sS":
+        sendSonarStart()
+    elif key in "rR":
+        sendWheelReset()
+    elif key in "qQ":
+        status = False
+    return status
+
+
+old_settings=None
+
+def init_anykey():
+    global old_settings
+    old_settings = termios.tcgetattr(sys.stdin)
+    new_settings = termios.tcgetattr(sys.stdin)
+    new_settings[3] = new_settings[3] & ~(termios.ECHO | termios.ICANON) # lflags
+    new_settings[6][termios.VMIN] = 0  # cc
+    new_settings[6][termios.VTIME] = 0 # cc
+    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_settings)
+    atexit.register(term_anykey)
+    return
+
+#@atexit.register
+def term_anykey():
+    global old_settings
+    if old_settings:
+       termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+    #clearScreen()
+    return
+
 def main():
-    for n in range(0, 64, 1): print("\r\n")
+    clearScreen()
+
     connected = False
     port = '/dev/ttyUSB0'
     baud = 115200
-    
     ser = serial.Serial(port, baud, timeout=0)
     
-    while not connected:
-        #serin = ser.read()
-        connected = True
-    
-        while (True):
-            if (ser.inWaiting()>0):
-                data_str = ser.read(ser.inWaiting())
-                for b in data_str:
-                    decodeByte(b)
-            txData = getTxByte()
-            if txData[0]:
-                ser.write(txData[1])
-            #Put the rest of your code you want here
-        return
+    init_anykey()
+    while True:
+        if txDataAvailable():
+            txList = [ser]
+        else:
+            txList = []
+        r, w, e = select.select([sys.stdin, ser], txList, [])
+
+        # data coming from keyboard?
+        if sys.stdin in r:
+            if not handleKeyPress(sys.stdin.read(1)):
+                break  # bail out
+
+        # data coming from serial?
+        if ser in r:
+            data_str = ser.read(ser.inWaiting())
+            for b in data_str:
+                decodeByte(b)
+
+        # Any data to transmit over serial?
+        if ser in w:
+            flagAndByte = getTxByte()
+            if flagAndByte[0]:
+                ser.write(chr(flagAndByte[1]))
+
+    return
 
 if __name__ == '__main__':
     main()
