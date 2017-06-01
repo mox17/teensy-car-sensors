@@ -3,44 +3,50 @@ from __future__ import print_function
 from collections import namedtuple
 from datetime import datetime
 import serial
+import Queue
 
+# The tx queue have byte arrays 
+txQueue = Queue.Queue()
+currTxPacket = None
 
 def locate(user_string, x=0, y=0):
-        # Don't allow any user errors. Python's own error detection will check for
-        # syntax and concatination, etc, etc, errors.
-        x=int(x)
-        y=int(y)
-        if x>=255: x=255
-        if y>=255: y=255
-        if x<=0: x=0
-        if y<=0: y=0
-        HORIZ=str(x)
-        VERT=str(y)
-        # Plot the user_string at the starting at position HORIZ, VERT...
-        print("\033["+VERT+";"+HORIZ+"f"+user_string)
+    # Don't allow any user errors. Python's own error detection will check for
+    # syntax and concatination, etc, etc, errors.
+    x=int(x)
+    y=int(y)
+    if x>=255: x=255
+    if y>=255: y=255
+    if x<=0: x=0
+    if y<=0: y=0
+    HORIZ=str(x)
+    VERT=str(y)
+    # Plot the user_string at the starting at position HORIZ, VERT...
+    print("\033["+VERT+";"+HORIZ+"f"+user_string)
+    return
 
 def prettyPrintDist(dist):
     sensor = dist.sensor
-    locate(' {:10d} cm'.format(dist.distance), 15*sensor, 1)
+    locate(' {:10} cm'.format(dist.distance), 15*sensor, 1)
     locate(' {:10} ms'.format(dist.when), 1, 8)
     locate("",0,9)
     return
 
 def prettyPrintWheels(left, right):
-    locate(' {:10d} pulses  {:10d} pulses'.format(left.dist, right.dist), 1, 3)
+    locate(' {:10} pulses  {:10} pulses'.format(left.dist, right.dist), 1, 3)
     locate(' {:10} p/s     {:10} p/s'.format(left.speed,     right.speed), 1, 4)
     locate(' {:10} dir     {:10} dir'.format(left.direction, right.direction), 1, 5)
     locate(' {:10} turn    {:10} turn'.format(left.turn,      right.turn), 1, 6)
+    locate(' {:10} ms'.format(left.when), 1, 8)
     locate("",0,9)
     return
 
 # Utility access functions 
 def get32(bytes):
-    val = bytes[0] + 0x100*bytes[1] + 0x10000*bytes[2] + 0x1000000*bytes[3]
+    val = bytes[0] + (bytes[1]<<8) + (bytes[2]<<16) + (bytes[3]<<24)
     return val
 
 def get16(bytes):
-    val = bytes[0] + 0x100*bytes[1]
+    val = bytes[0] + (bytes[1]<<8)
     return val
 
 def getStr(bytes):
@@ -69,6 +75,7 @@ Cmd = enum(\
     CMD_ERROR_COUNT   = 9,  #// Error counter name and value
     CMD_GET_COUNTERS  = 10, #// Ask teensy to send all non-zero counters
     CMD_SONAR_RETRY   = 11, #// Do a repeat nextSonar() (for internal stall recovery)
+    CMD_SONAR_WAIT    = 12, #// Set waiting time between sonar pings in ms
     )       
 
 # Packet framing bytes
@@ -87,6 +94,7 @@ pingpong   = namedtuple("pingpong", "timestamp1 timestamp2")
 distance   = namedtuple("distance", "sensor distance when")
 rotation   = namedtuple("rotation", "speed direction when turn dist")
 errorcount = namedtuple("errorcount", "count name")
+sonarwait  = namedtuple("pause")
 
 def getPingPong(frm):
     """
@@ -169,7 +177,6 @@ def decodeFrame(frm):
         right = getRotation(frm[16:])
         #print("Rotation", left, right)
         prettyPrintWheels(left, right)
-        pass
     elif hdr.cmd == Cmd.CMD_WHEEL_RESET:
         pass
     elif hdr.cmd == Cmd.CMD_ERROR_COUNT:
@@ -252,17 +259,17 @@ def buildHeader(dst, src, cmd, buf=None):
     
 def add32(buf, value):
     buf.append(value & 0xff)
-    value >>= 0xff
+    value >>= 8
     buf.append(value & 0xff)
-    value >>= 0xff
+    value >>= 8
     buf.append(value & 0xff)
-    value >>= 0xff
+    value >>= 8
     buf.append(value & 0xff)
     return buf
 
 def add16(buf, value):
     buf.append(value & 0xff)
-    value >>= 0xff
+    value >>= 8
     buf.append(value & 0xff)
     return buf
 
@@ -272,10 +279,125 @@ def sendPing(timestamp1):
     milliSecond = dt.microsecond / 1000
     buffer = add32(buf, milliSecond) # timestamp1
     buffer = add32(buf, 0)           # timestamp2
-    # Put buffer on tx queue
+    txQueue.put(buffer)
     return
 
+def sendSonarStop():
+    buffer = buildHeader(ADDR_TEENSY, ADDR_RPI, Cmd.CMD_SONAR_STOP)
+    txQueue.put(buffer)
+    return
+
+def sendSonarStart():
+    buffer = buildHeader(ADDR_TEENSY, ADDR_RPI, Cmd.CMD_SONAR_START)
+    txQueue.put(buffer)
+    return
+
+def sendWheelReset():
+    buffer = buildHeader(ADDR_TEENSY, ADDR_RPI, Cmd.CMD_WHEEL_RESET)
+    txQueue.put(buffer)
+    return
+
+def sendGetCounters():
+    buffer = buildHeader(ADDR_TEENSY, ADDR_RPI, Cmd.CMD_GET_COUNTERS)
+    txQueue.put(buffer)
+    return
+
+def sendSonarWait(pauseInMs):
+    buffer = buildHeader(ADDR_TEENSY, ADDR_RPI, Cmd.CMD_SONAR_WAIT)
+    buffer = add32(buffer, pauseInMs)
+    txQueue.put(buffer)
+    return
+
+def sendSonarSequence(sequence):
+    buffer = buildHeader(ADDR_TEENSY, ADDR_RPI, Cmd.CMD_SET_SONAR_SEQ)
+    l = len(sequence)
+    if (l > 0 and l <= 24):
+        buffer.append(l)
+        buffer = buffer + sequence
+        txQueue.put(buffer)
+    return
+
+def calcChecksum(buf):
+    sum = 0
+    for b in buf:
+        sum += b
+        sum += sum >> 8
+        sum = sum & 0xff
+    buf.append(0xff-sum)
+    return buf
+
+def getDataPacket():
+    global txQueue
+    global currTxPacket
+    if not txQueue.empty():
+        currTxPacket = calcChecksum(txQueue.get())
+        return true
+    else:
+        currTxPacket = None
+    return false
+
+def getDataByte():
+    # return tuple (dataAvailable, byteToSend)
+    global currTxPacket
+
+    if currTxPacket == None:
+        getDataPacket()
+    if currTxPacket != None:
+        if len(currTxPacket) > 0:
+            b = currTxPacket[0]
+            currTxPacket = currTxPacket[1:]
+            return [True, b]
+    return [False,None]
+
+def txDataAvailable():
+    if currTxPacket != None:
+        return True
+    else:
+        return getDataPacket()
+
+# TX state machine states
+txs = enum(
+        TS_BEGIN,        #//!< Nothing sent yet, deliver 0x7e
+        TS_DATA,         #//!< Sending normal data
+        TS_ESCAPE,       #//!< Escape has been sent, escByte is next
+        TS_END,          #//!< Checksum sent, frame is next. Can be skipped if there is a next packet in queue
+        TS_IDLE,         #//!< No data to transmit.
+        )
+
+txState = txs.TS_BEGIN
+escByte = None
+
 def getTxByte():
+    global escByte
+
+    if txState == txs.TS_BEGIN:
+        if txDataAvailable():
+            txState = txs.TX_DATA
+            return [True, FRAME_START_STOP]
+        else:
+            return [False,None]
+
+    elif txState == txs.TS_DATA:
+        dataAvailable, byte = getDataByte()
+        if dataAvailable == True:
+            if (byte == FRAME_START_STOP) or \
+               (byte == FRAME_DATA_ESCAPE):
+                escByte = byte ^ FRAME_XOR
+                byte = FRAME_DATA_ESCAPE
+                txState = txs.TS_ESCAPE
+            return [True, byte]
+        else:
+            # This packet done - next one back-to-back?
+            if getDataPacket():
+                txState = txs.TS_DATA
+            else:
+                txState = txs.TS_BEGIN
+            return [True, FRAME_START_STOP]
+
+    elif txState == txs.TS_ESCAPE:
+        txState = txs.TS_DATA
+        return [True, escByte]
+
     return [False,None]
 
 def main():
