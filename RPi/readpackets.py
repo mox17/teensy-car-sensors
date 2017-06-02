@@ -98,7 +98,6 @@ FRAME_XOR         = 0x20
 # Defined addresses
 ADDR_RPI    = 0x01
 ADDR_TEENSY = 0x02
-ADDR_ALL    = 0xff
 
 # Protocol data fields
 header     = namedtuple("header", "dst src cmd rsv")
@@ -108,7 +107,7 @@ rotation   = namedtuple("rotation", "speed direction when turn dist")
 errorcount = namedtuple("errorcount", "count name")
 #sonarwait  = namedtuple("pause")
 
-def getPingPong(frm):
+def unpackPingPong(frm):
     """
     struct pingpong
     {
@@ -120,7 +119,7 @@ def getPingPong(frm):
     pp = pingpong(get32(frm), get32(frm[4:]))
     return pp
 
-def getSonarStatus(frm):
+def unpackSonarStatus(frm):
     """
     struct distance
     {
@@ -134,7 +133,7 @@ def getSonarStatus(frm):
     dist = distance(frm[0], get16(frm[2:])/57, get32(frm[4:]))
     return dist
 
-def getRotation(frm):
+def unpackRotation(frm):
     """
     struct rot_one
     {
@@ -149,7 +148,7 @@ def getRotation(frm):
     rot = rotation(get16(frm), frm[2], get32(frm[4:]), get32(frm[8:]), get32(frm[12:]))
     return rot
 
-def getErrorCount(frm):
+def unpackErrorCount(frm):
     """
     struct errorcount
     {
@@ -167,13 +166,12 @@ def rxDecodeFrame(frm):
     if len(frm)< 4:
         return
     hdr = header(frm[0], frm[1], frm[2], frm[3])
-    #print(hdr)
     frm = frm[4:]  # remove header and rxChecksum
     if hdr.cmd == Cmd.CMD_PING_QUERY :
-        pp = getPingPong(frm)
+        pp = unpackPingPong(frm)
         print("PING", pp)
     elif hdr.cmd == Cmd.CMD_PONG_RESP:
-        pp = getPingPong(frm)
+        pp = unpackPingPong(frm)
         prettyPrintPong(pp, getMilliSeconds())
     elif hdr.cmd == Cmd.CMD_SET_SONAR_SEQ:
         pass
@@ -182,18 +180,18 @@ def rxDecodeFrame(frm):
     elif hdr.cmd == Cmd.CMD_SONAR_START:
         pass
     elif hdr.cmd == Cmd.CMD_SONAR_STATUS:
-        dist = getSonarStatus(frm)
+        dist = unpackSonarStatus(frm)
         prettyPrintDist(dist)
         #print(dist)
     elif hdr.cmd == Cmd.CMD_WHEEL_STATUS:
-        left  = getRotation(frm)
-        right = getRotation(frm[16:])
+        left  = unpackRotation(frm)
+        right = unpackRotation(frm[16:])
         #print("Rotation", left, right)
         prettyPrintWheels(left, right)
     elif hdr.cmd == Cmd.CMD_WHEEL_RESET:
         pass
     elif hdr.cmd == Cmd.CMD_ERROR_COUNT:
-        err = getErrorCount(frm)
+        err = unpackErrorCount(frm)
         print("\033[K",err)
         
     return
