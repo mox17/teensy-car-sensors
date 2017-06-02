@@ -24,7 +24,7 @@ def locate(user_string, x=0, y=0):
 
 def prettyPrintDist(dist):
     sensor = dist.sensor
-    locate(' {:10} cm'.format(dist.distance), 15*sensor, 1)
+    locate(' {:10} mm'.format(dist.distance), 15*sensor, 1)
     locate(' {:10} ms'.format(dist.when), 1, 8)
     locate("",0,9)
     return
@@ -40,11 +40,20 @@ def prettyPrintWheels(left, right):
 
 def prettyPrintPong(resp):
     now = sensorhub.getMilliSeconds()
-    locate('{:10}ms  {:10}ms'.format(now -resp.timestamp1, resp.timestamp2), 25, 8)
+    locate('{:10} ms  {:10} ms'.format(now -resp.timestamp1, resp.timestamp2), 25, 8)
     return
 
+errorPos = {}
+errLin = 12
+def errorLine(name):
+    global errorPos, errLin
+    if not (name in errorPos):
+        errorPos[name] = errLin
+        errLin += 1
+    return errorPos[name]
+
 def prettyPrintError(err):
-    print("\033[K",err)
+    locate("{:20}: {:10}".format(err.name, err.count), 1, errorLine(err.name))
     return
 
 
@@ -55,17 +64,25 @@ def clearScreen():
 # User input handling
 def handleKeyPress(sensor, key):
     key = key.upper()
-    status = \
-    { 'P': sensor.sendPing() or True,
-      'N': sensor.sendSonarStop() or True,
-      'S': sensor.sendSonarStart() or True,
-      'R': sensor.sendWheelReset() or True,
-      'C': sensor.sendGetCounters() or True,
-      '\x0C' : clearScreen() or True,
-      'X': sensor.sendSonarSequence([0,1,5]) or True,
-      'Y': sensor.sendSonarSequence([0,1,2,3,4,5]) or True,
-      'Q': sensor,
-    }[key]
+    status = True
+    if key == 'P':
+        sensor.sendPing()
+    elif key == 'N':
+        sensor.sendSonarStop()
+    elif key == 'S':
+        sensor.sendSonarStart()
+    elif key == 'R':
+        sensor.sendWheelReset()
+    elif key == 'C':
+        sensor.sendGetCounters()
+    elif key == '\x0C':
+        clearScreen()
+    elif key == 'X':
+        sensor.sendSonarSequence([0,1,5])
+    elif key == 'Y':
+        sensor.sendSonarSequence([0,1,2,3,4,5])
+    elif key == 'Q':
+        status = False
     return status
 
 
@@ -88,18 +105,22 @@ def term_anykey():
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
     return
 
+B = "\033[1;31m"
+N = "\033[0m"
+
 def main():
     sh = sensorhub.Sensorhub()
     sh.setOutputHandlers(None, prettyPrintPong, prettyPrintWheels, prettyPrintDist, prettyPrintError)
 
     clearScreen()
-
+    locate(B+"P"+N+"ing So"+B+"n"+N+"arstop "+B+"S"+N+"onarstart Wheel"+B+"R"+N+"eset "+B+"C"+N+"ounters "+B+"X"+N+"=seq1 "+B+"Y"+N+"=seq2", 1, 10)
     connected = False
     port = '/dev/ttyUSB0'
     baud = 115200
     ser = serial.Serial(port, baud, timeout=0)
     
     init_anykey()
+    #xpos=1
     while True:
         if sh.txDataAvailable():
             txList = [ser]
@@ -109,6 +130,8 @@ def main():
 
         # data coming from keyboard?
         if sys.stdin in r:
+            #locate("\033[K",1,30)
+            #xpos=1
             if not handleKeyPress(sh, sys.stdin.read(1)):
                 break  # bail out
 
@@ -123,6 +146,9 @@ def main():
             flagAndByte = sh.txGetByte()
             if flagAndByte[0]:
                 ser.write(chr(flagAndByte[1]))
+                #locate(format(flagAndByte[1],"02x"),xpos,30)
+                #xpos += 2
+                
 
     return
 

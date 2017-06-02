@@ -61,7 +61,7 @@ def unpackSonarStatus(frm):
         uint32_t when;     // Time when data was measured
     } __attribute__((packed));
     """
-    dist = distance(frm[0], get16(frm[2:])/57, get32(frm[4:]))
+    dist = distance(frm[0], get16(frm[2:])*10/57, get32(frm[4:]))
     return dist
 
 def unpackRotation(frm):
@@ -179,7 +179,8 @@ class Sensorhub:
         frm = frm[4:]  # remove header and rxChecksum
         if hdr.cmd == Cmd.CMD_PING_QUERY :
             pp = unpackPingPong(frm)
-            print("PING", pp)
+            if self.ping != None:
+                self.ping(pp)
         elif hdr.cmd == Cmd.CMD_PONG_RESP:
             pp = unpackPingPong(frm)
             if self.pong != None:
