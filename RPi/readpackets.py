@@ -13,10 +13,6 @@ def getMilliSeconds():
     dt = datetime.now()
     return dt.second * 1000 + dt.microsecond / 1000
 
-# The TX queue have byte arrays 
-txQueue = Queue.Queue()
-currTxPacket = None
-
 def locate(user_string, x=0, y=0):
     # Don't allow any user errors. Python's own error detection will check for
     # syntax and concatination, etc, etc, errors.
@@ -165,14 +161,14 @@ def getErrorCount(frm):
     err = errorcount(get32(frm), getStr(frm[4:]))
     return err
 
-def decodeFrame(frm):
+def rxDecodeFrame(frm):
     global Cmd
 
     if len(frm)< 4:
         return
     hdr = header(frm[0], frm[1], frm[2], frm[3])
     #print(hdr)
-    frm = frm[4:]  # remove header and checksum
+    frm = frm[4:]  # remove header and rxChecksum
     if hdr.cmd == Cmd.CMD_PING_QUERY :
         pp = getPingPong(frm)
         print("PING", pp)
@@ -202,78 +198,80 @@ def decodeFrame(frm):
         
     return
 
-# Possible receiver states 
-rxStateBegin = 0
-rxStateData  = 1
+# Possible receiver states
+rxs = enum(
+    RS_BEGIN = 0,
+    RS_DATA  = 1,
+    )
 
-escapeFlag = False
-rxState = rxStateBegin
+rxEscapeFlag = False
+rxState = rxs.RS_BEGIN
 
-rawData = []
-checksum = 0
+rxRawData = []
+rxChecksum = 0
 
-def checksumCalc(b):
-    global checksum
-    checksum += b
-    checksum += (checksum >> 8);
-    checksum = checksum & 0xff
+def rxChecksumCalc(b):
+    global rxChecksum
+    rxChecksum += b
+    rxChecksum += (rxChecksum >> 8);
+    rxChecksum = rxChecksum & 0xff
     return
 
-def checksumNew():
-    global checksum
-    checksum = 0
+def rxChecksumNew():
+    global rxChecksum
+    rxChecksum = 0
     return
 
-def handleFrame():
-    global rawData
-    if (len(rawData) > 0):
-        #print(len(rawData), rawData)
-        if checksum != 0xff:
-            print("checksum error:", checksum, "\nerror data:", len(rawData), rawData)
+def rxHandleFrame():
+    global rxRawData
+    if (len(rxRawData) > 0):
+        if rxChecksum != 0xff:
+            print("rxChecksum error:", rxChecksum, "\nerror data:", len(rxRawData), rxRawData)
         else:
-            decodeFrame(rawData[:-1])
+            rxDecodeFrame(rxRawData[:-1])
     return
 
-def newFrame():
-    global rawData
-    rawData = []
-    checksumNew()
+def rxNewFrame():
+    global rxRawData
+    rxRawData = []
+    rxChecksumNew()
     return
 
-def decodeByte(character):
-    global rxState, escapeFlag
+def rxRawByte(character):
+    global rxState, rxEscapeFlag
     b = ord(character)
-    if rxState == rxStateBegin:
+    if rxState == rxs.RS_BEGIN:
         if b == FRAME_START_STOP:
-            rxState = rxStateData
-            newFrame()
-    elif rxState == rxStateData:
+            rxState = rxs.RS_DATA
+            rxNewFrame()
+    elif rxState == rxs.RS_DATA:
         if b == FRAME_START_STOP:
-            handleFrame()
-            newFrame()
+            rxHandleFrame()
+            rxNewFrame()
             return
         elif b == FRAME_DATA_ESCAPE:
-            escapeFlag = True
+            rxEscapeFlag = True
             return
         else:
-            if escapeFlag == True:
-                escapeFlag = False
+            if rxEscapeFlag == True:
+                rxEscapeFlag = False
                 b = b ^ FRAME_XOR
-            checksumCalc(b)
-            rawData.append(b)
+            rxChecksumCalc(b)
+            rxRawData.append(b)
     else:
         assert("Internal error")
     return
 
+# Low-level packet helpers
 def buildHeader(dst, src, cmd, buf=None):
     if buf == None:
         buf = []
     buf.append(dst)
     buf.append(src)
     buf.append(cmd)
-    buf.append(0)
+    buf.append(0) # Reserved field
     return buf
-    
+
 def add32(buf, value):
     buf.append(value & 0xff)
     value >>= 8
@@ -289,6 +287,8 @@ def add16(buf, value):
     value >>= 8
     buf.append(value & 0xff)
     return buf
+
+# High-level packet sending helpers
 
 def sendPing():
     buffer = buildHeader(ADDR_TEENSY, ADDR_RPI, Cmd.CMD_PING_QUERY)
@@ -332,7 +332,12 @@ def sendSonarSequence(sequence):
         txQueue.put(buffer)
     return
 
-def appendChecksum(buf):
+# TX side of packet handling
+# The TX queue have byte arrays 
+txQueue = Queue.Queue()
+txCurrPacket = None
+
+def txAppendChecksum(buf):
     sum = 0
     for b in buf:
         sum += b
@@ -341,48 +346,48 @@ def appendChecksum(buf):
     buf.append(0xff-sum)
     return buf
 
-def getDataPacket():
+def txGetNextPacket():
     global txQueue
-    global currTxPacket
+    global txCurrPacket
 
-    if currTxPacket == None or len(currTxPacket) == 0:
+    if txCurrPacket == None or len(txCurrPacket) == 0:
         if not txQueue.empty():
-            currTxPacket = appendChecksum(txQueue.get())
+            txCurrPacket = txAppendChecksum(txQueue.get())
             return True
     return False
 
-def getDataByte():
+def txGetDataByte():
     # return tuple (dataAvailable, byteToSend)
-    global currTxPacket
+    global txCurrPacket
 
-    if currTxPacket == None:
-        getDataPacket()
-    if currTxPacket != None:
-        if len(currTxPacket) > 0:
-            b = currTxPacket[0]
-            currTxPacket = currTxPacket[1:]
+    if txCurrPacket == None:
+        txGetNextPacket()
+    if txCurrPacket != None:
+        if len(txCurrPacket) > 0:
+            b = txCurrPacket[0]
+            txCurrPacket = txCurrPacket[1:]
             return [True, b]
     return [False,None]
 
 def txDataAvailable():
-    if txState != txs.TS_BEGIN or (currTxPacket != None and len(currTxPacket) > 0):
+    if txState != txs.TS_BEGIN or (txCurrPacket != None and len(txCurrPacket) > 0):
         return True
     else:
-        return getDataPacket()
+        return txGetNextPacket()
 
 # TX state machine states
 txs = enum(
         TS_BEGIN  = 1,  #//!< Nothing sent yet, deliver 0x7e
         TS_DATA   = 2,  #//!< Sending normal data
-        TS_ESCAPE = 3,  #//!< Escape has been sent, escByte is next
+        TS_ESCAPE = 3,  #//!< Escape has been sent, txEscByte is next
         )
 
 txState = txs.TS_BEGIN
-escByte = None
+txEscByte = None
 
-def getTxByte():
+def txGetByte():
     global txState
-    global escByte
+    global txEscByte
 
     if txState == txs.TS_BEGIN:
         if txDataAvailable():
@@ -392,17 +397,17 @@ def getTxByte():
             return [False,None]
 
     elif txState == txs.TS_DATA:
-        dataAvailable, byte = getDataByte()
+        dataAvailable, byte = txGetDataByte()
         if dataAvailable == True:
             if (byte == FRAME_START_STOP) or \
                (byte == FRAME_DATA_ESCAPE):
-                escByte = byte ^ FRAME_XOR
+                txEscByte = byte ^ FRAME_XOR
                 byte = FRAME_DATA_ESCAPE
                 txState = txs.TS_ESCAPE
             return [True, byte]
         else:
             # This packet done - next one back-to-back?
-            if getDataPacket():
+            if txGetNextPacket():
                 txState = txs.TS_DATA
             else:
                 txState = txs.TS_BEGIN
@@ -410,10 +415,11 @@ def getTxByte():
 
     elif txState == txs.TS_ESCAPE:
         txState = txs.TS_DATA
-        return [True, escByte]
+        return [True, txEscByte]
 
     return [False,None]
 
+# User input handling
 def handleKeyPress(key):
     key = key.upper()
     status = \
@@ -443,12 +449,10 @@ def init_anykey():
     atexit.register(term_anykey)
     return
 
-#@atexit.register
 def term_anykey():
     global old_settings
     if old_settings:
-       termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-    #clearScreen()
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
     return
 
 def main():
@@ -476,11 +480,11 @@ def main():
         if ser in r:
             data_str = ser.read(ser.inWaiting())
             for b in data_str:
-                decodeByte(b)
+                rxRawByte(b)
 
         # Any data to transmit over serial?
         if ser in w:
-            flagAndByte = getTxByte()
+            flagAndByte = txGetByte()
             if flagAndByte[0]:
                 ser.write(chr(flagAndByte[1]))
 
