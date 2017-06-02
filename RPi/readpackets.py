@@ -114,7 +114,6 @@ def main():
 
     clearScreen()
     locate(B+"P"+N+"ing So"+B+"n"+N+"arstop "+B+"S"+N+"onarstart Wheel"+B+"R"+N+"eset "+B+"C"+N+"ounters "+B+"X"+N+"=seq1 "+B+"Y"+N+"=seq2", 1, 10)
-    connected = False
     port = '/dev/ttyUSB0'
     baud = 115200
     ser = serial.Serial(port, baud, timeout=0)
