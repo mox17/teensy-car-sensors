@@ -55,7 +55,7 @@ def errorLine(name):
 
 def prettyPrintError(err):
     locate("{:20}: {:10}".format(err.name, err.count), 1, errorLine(err.name))
-        return
+    return
         
 
 def clearScreen():
