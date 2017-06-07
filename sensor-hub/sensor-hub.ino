@@ -22,9 +22,9 @@ const int maxDistance = 200; // Maximum distance we want to ping for (in centime
 const int ultraSound1TrigPin = 2;
 const int ultraSound2TrigPin = 3;
 const int ultraSound3TrigPin = 4;
-const int ultraSound4TrigPin = 5;
-const int ultraSound5TrigPin = 6;
-const int ultraSound6TrigPin = 7;
+const int ultraSound4TrigPin = 10;
+const int ultraSound5TrigPin = 11;
+const int ultraSound6TrigPin = 12;
 const int sonarPins[] = {ultraSound1TrigPin,
                          ultraSound2TrigPin,
                          ultraSound3TrigPin,
