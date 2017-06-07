@@ -118,7 +118,7 @@ def main():
     if (len(sys.argv) > 1):
         port = sys.argv[1]
     else:
-    port = '/dev/ttyUSB0'
+        port = '/dev/ttyAMA0'
     baud = 115200
     ser = serial.Serial(port, baud, timeout=0)
     
